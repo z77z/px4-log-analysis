@@ -56,8 +56,8 @@ class ParamRef:
     """
 
     generic_name: str
-    axis: Optional[str] = None    # "roll", "pitch", "yaw", "x", "y", "z"
-    category: str = ""            # "pid", "filter", "mag", "general"
+    axis: Optional[str] = None    # 可选值: "roll", "pitch", "yaw", "x", "y", "z"
+    category: str = ""            # 类别: "pid", "filter", "mag", "general"
 
     def __post_init__(self):
         if not self.category:
@@ -97,7 +97,7 @@ class StepMetrics:
 class DiagnosisEntry:
     """单条诊断结果。"""
     symptom: str
-    severity: str          # "high", "medium", "low"
+    severity: str          # 严重度: "high", "medium", "low"
     affected_metric: str
     rule_id: str = ""
 
@@ -118,7 +118,7 @@ class ParamRecommendation:
     suggested: float
     reason: str
     confidence: Confidence = Confidence.MEDIUM
-    action: str = ""       # "increase", "decrease", "set"
+    action: str = ""       # 操作类型: "increase", "decrease", "set"
 
     @property
     def change_percent(self) -> float:
@@ -175,7 +175,7 @@ class VibrationPeak:
     """单个振动峰值。"""
     frequency_hz: float
     amplitude: float           # m/s²
-    source_guess: str = ""     # "motor", "propeller", "frame", "unknown"
+    source_guess: str = ""     # 来源推测: "motor", "propeller", "frame", "unknown"
     harmonic_of: Optional[float] = None  # 如果是某频率的谐波
 
 

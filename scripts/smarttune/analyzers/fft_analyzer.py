@@ -746,7 +746,7 @@ class FFTAnalyzer:
                 f"IMU 数据过短（{len(gyro)} 个样本，需要 {self._MIN_SAMPLES}+）"
             )
 
-        # Build the internal dict format expected by downstream methods
+        # 构造下游方法所需的内部 dict 格式
         self._gyro_data = {
             "time": imu_ts,
             "GyrX": gyro[:, 0],

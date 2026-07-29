@@ -40,9 +40,9 @@ def _to_double_sided(single: np.ndarray) -> np.ndarray:
     """
     单边复谱转双边复谱（复现 WebTools to_double_sided）。
 
-    single: complex ndarray, shape (real_len,)
+    single: 复数 ndarray，形状 (real_len,)
         rfft 结果（已缩放：DC/Nyq *1/N, 其余 *2/N）
-    returns: complex128 ndarray, shape (2*real_len - 2,)
+    returns: complex128 ndarray，形状 (2*real_len - 2,)
         full_len = 2 * (real_len - 1)
         DC / Nyquist 原样保留
         正频率 *0.5；负频率位置存放正频率的共轭 *0.5
@@ -131,7 +131,8 @@ def estimate_step_response(
 
     Returns
     -------
-    Dict with keys: time, step_response, valid_windows, total_windows, window_size, sample_rate, method
+    dict
+        包含键: time, step_response, valid_windows, total_windows, window_size, sample_rate, method
     """
     n = len(target)
 
@@ -187,7 +188,7 @@ def estimate_step_response(
     # 找到 cutfreq 所在 bin 索引
     bin_idx = int(np.searchsorted(bins, cutfreq, side="right"))
     len_lpf = bin_idx
-    len_lpf += len_lpf - 2  # account for double sided, DC and Nyquist not copied
+    len_lpf += len_lpf - 2  # 考虑双边谱，DC 和 Nyquist 分量不重复拷贝
     len_lpf = max(len_lpf, 1)
 
     radius = int(np.ceil(len_lpf * 0.5))
@@ -206,7 +207,7 @@ def estimate_step_response(
     # 镜像拼接（精确复现 WebTools 语法）
     sn = np.concatenate([sn, sn[1:real_len - 1][::-1]])
 
-    # Scale: -1 → offset 1 + 1e-9 → ×10 → inverse
+    # 缩放：-1 → 偏移 1 + 1e-9 → ×10 → 取倒数
     sn = 1.0 / (10.0 * (1.0 - sn + 1e-9))
 
     # ------------------------------------------------------------

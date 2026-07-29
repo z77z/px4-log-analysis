@@ -45,7 +45,7 @@ def to_jsonable(value: Any) -> Any:
 
     处理：
     - None, str, int, float, bool → 直接透传
-    - Enum → .value
+    - Enum → 取 .value
     - NumPy 标量 → .item()
     - NumPy 数组 → 摘要（小数组返回长度与前几个值，大数组返回统计信息）
     - dataclass → 字段 dict
@@ -222,13 +222,13 @@ def serialize_fft_result(
 
 
 def serialize_magfit_result(
-    result,  # MagFitResult (services) or FitResult (analyzer.MAGFit.analyze)
+    result,  # MagFitResult（services 层）或 FitResult（analyzer.MAGFit.analyze）
     adapter: Optional[PlatformAdapter] = None,
     max_recommendations: int = 20,
 ) -> Dict[str, Any]:
     """序列化磁力计标定结果。
 
-    兼容 MagFitResult (services 层) 和 FitResult (analyzer.MAGFit.analyze) 两种 result:
+    兼容 MagFitResult（services 层）和 FitResult（analyzer.MAGFit.analyze）两种结果:
     - MagFitResult: .recommendations (List[ParamRecommendation]) + .offsets (dict x/y/z)
     - FitResult: .ofs/.dia/.odi/.mot (4 个 np.ndarray shape 3) + .assessment (str), 无 recommendations
     """
@@ -259,7 +259,7 @@ def serialize_magfit_result(
     else:
         offsets_dict = {}
 
-    # recommendations: duck-type 兜底 (FitResult 没有 recommendations)
+    # recommendations: 鸭子类型兜底（FitResult 没有 recommendations）
     recs_raw = getattr(result, "recommendations", None) or []
     recs = [
         serialize_param_recommendation(r, adapter)

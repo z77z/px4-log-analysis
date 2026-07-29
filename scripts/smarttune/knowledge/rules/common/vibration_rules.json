@@ -1,6 +1,6 @@
 {
   "vibration_thresholds": {
-    "_description": "Cross-platform vibration thresholds based on physical limits",
+    "_description": "基于物理极限的跨平台振动阈值",
     "accel_rms_mss": {
       "excellent": 3.0,
       "good": 10.0,

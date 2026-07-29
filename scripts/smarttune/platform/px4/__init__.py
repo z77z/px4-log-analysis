@@ -4,14 +4,14 @@ smarttune/platform/px4/__init__.py
 PX4 ULog 日志适配器 — 完整实现（基于 pyulog）。
 
 uORB 主题映射：
-  vehicle_angular_velocity  → PID actual (rad/s → deg/s) + gyro
-  vehicle_rates_setpoint    → PID desired (rad/s → deg/s)
+  vehicle_angular_velocity  → PID 实际值 (rad/s → deg/s) + 陀螺仪
+  vehicle_rates_setpoint    → PID 目标值 (rad/s → deg/s)
   sensor_combined           → gyro/accel 回退源
   vehicle_acceleration      → accel (m/s²)
   sensor_mag                → mag (Gauss → mGauss)
   actuator_motors           → motor_output (0~1，PX4 v1.14+)
   actuator_outputs          → motor_output 回退（PWM → 归一化）
-  battery_status            → voltage / current
+  battery_status            → 电压 / 电流
   vehicle_gps_position /
   sensor_gps                → extras["gps_position"]（lat/lon 1e7 缩放）
   vehicle_attitude          → extras["attitude_quat"]（四元数）

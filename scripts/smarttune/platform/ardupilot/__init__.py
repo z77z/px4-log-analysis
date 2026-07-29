@@ -4,11 +4,11 @@ smarttune/platform/ardupilot/__init__.py
 ArduPilot DataFlash 日志适配器。
 
 parse() 完整移植自旧版 LogParser._dispatch()，保留全部消息类型处理：
-PIDR/PIDP/PIDY、ATC_RAT_*、RATE (legacy)、IMU、ATT、GYRO、
+PIDR/PIDP/PIDY、ATC_RAT_*、RATE（旧版）、IMU、ATT、GYRO、
 COMPASS、MAG、GPS、AHR2、POS、BAT、VER、MSG、PARM、ORGN、ATUN、ATDE
 
 PID 格式优先级（与旧版一致）:
-  PIDR/PIDP/PIDY (modern)  >  ATC_RAT_RLL/PIT/YAW (modern)  >  RATE (legacy fallback)
+  PIDR/PIDP/PIDY（新版）>  ATC_RAT_RLL/PIT/YAW（新版）>  RATE（旧版回退）
 """
 
 from __future__ import annotations

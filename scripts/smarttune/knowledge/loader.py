@@ -45,7 +45,7 @@ def _load_json_dir(directory: Path) -> Dict[str, Any]:
             with open(json_file, encoding="utf-8") as fh:
                 result[json_file.stem] = json.load(fh)
         except (json.JSONDecodeError, OSError) as exc:
-            logger.warning("Skipping invalid JSON %s: %s", json_file, exc)
+            logger.warning("跳过无效 JSON 文件 %s: %s", json_file, exc)
     return result
 
 

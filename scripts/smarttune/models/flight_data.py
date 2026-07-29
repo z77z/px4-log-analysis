@@ -85,7 +85,7 @@ class FlightData:
 
     # ── PID 信号（必选）──────────────────────────────────────
     pid: Dict[str, AxisPIDSignal] = field(default_factory=dict)
-    # keys: "roll", "pitch", "yaw"
+    # 键: "roll", "pitch", "yaw"
 
     # ── IMU 原始数据（必选）──────────────────────────────────
     gyro: Optional[np.ndarray] = None       # (N, 3), deg/s
@@ -95,11 +95,11 @@ class FlightData:
     # ── 可选信号 ────────────────────────────────────────────
     mag: Optional[np.ndarray] = None        # (N, 3), mGauss
     mag_timestamp_s: Optional[np.ndarray] = None
-    baro_alt: Optional[np.ndarray] = None   # (N,), meters
-    motor_output: Optional[np.ndarray] = None  # (N, num_motors), 0-1
+    baro_alt: Optional[np.ndarray] = None   # (N,), 米
+    motor_output: Optional[np.ndarray] = None  # (N, num_motors), 0-1 归一化
     motor_timestamp_s: Optional[np.ndarray] = None
-    battery_voltage: Optional[np.ndarray] = None   # (N,), Volts
-    battery_current: Optional[np.ndarray] = None   # (N,), Amps
+    battery_voltage: Optional[np.ndarray] = None   # (N,), V
+    battery_current: Optional[np.ndarray] = None   # (N,), A
     battery_timestamp_s: Optional[np.ndarray] = None
 
     # ── 飞行模式 ────────────────────────────────────────────
