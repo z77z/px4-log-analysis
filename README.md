@@ -1,128 +1,128 @@
 # PX4 Log Analysis
 
-> PX4 飞行日志分析与调参顾问 — 从 `.ulg` 日志到可操作的调参建议,一站式完成。
+> 一个 AI Skill:让大模型学会分析 PX4 飞行日志、诊断飞行问题、输出调参建议。
 
+[![Skill](https://img.shields.io/badge/AI-Skill-8b5cf6?logo=openai&logoColor=white)](SKILL.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![PX4](https://img.shields.io/badge/PX4-Autopilot-orange?logo=px4&logoColor=white)](https://px4.io/)
 
 ---
 
-## 简介
+## 这是什么
 
-`px4-log-analysis` 是一个面向 PX4 自驾仪的端到端飞行日志诊断与调参工具。它接受本地 `.ulg` 文件或 `logs.px4.io` 在线日志链接,从原始日志中提取飞行状态、控制跟踪、振动、电源、EKF 估计器等关键指标,结合内置判读知识库给出可操作的调参建议,并生成按「日期 + 机型 + 机架」命名的归档报告,支持跨次飞行的纵向对比。
+`px4-log-analysis` 是一个 **AI Skill**(大模型技能包)。它赋予 AI 助手分析 PX4 飞行日志的能力 —— 当用户丢来一个 `.ulg` 日志文件或 `logs.px4.io` 链接时,AI 会自动执行完整的诊断流程:提取飞行指标、评估控制跟踪、定位振动问题、给出参数修改建议,最终生成一份结构化的归档报告。
 
-核心由两部分协同:
+与传统命令行工具不同,这个 Skill 的核心是 [`SKILL.md`](SKILL.md) —— 一份写给 AI 的指令手册,定义了 7 步分析流程、判读阈值知识库和报告模板。AI 按此手册编排 `scripts/` 下的工具链,完成从原始日志到可操作建议的端到端转换。
 
-- **摘要脚本** `px4_log_summary.py` — 一次性抽取 11 个结构化小节(平台信息 / 振动 / 角速率跟踪 / 执行器饱和 / 电源 / GPS / EKF / 飞行剖面等)
-- **SmartTune CLI** `smarttune/` (v3.0.3, MIT) — 自动化深度分析:日志质量评分、PID 阶跃响应评级、FFT 振动频谱与陷波建议、SysID 系统辨识
+### 工作原理
 
-## 功能特性
-
-| 能力 | 说明 | PX4 |
-|------|------|:---:|
-| `quality` | 日志质量评分(完整性 / 激励 / 采样率) | ✅ |
-| `pid` | PID 阶跃响应评级(上升时间 / 超调 / 振荡) | ✅ |
-| `fft` | 振动频谱分析 + 陷波滤波器建议 | ✅ |
-| `sysid` | ARX 系统辨识(自然频率 / 阻尼 / 带宽) | ✅ |
-| 摘要提取 | 机型判别 / 模式时间线 / 电源 / 空速 / 参数快照 | ✅ |
-| 历史对比 | 同机型跨次飞行指标趋势对比 | ✅ |
-
-## 快速开始
-
-### 安装依赖
-
-```bash
-pip install -r requirements.txt
+```
+用户: "帮我分析这个飞行日志 flight.ulg"
+                ↓
+   AI 读取 SKILL.md → 按流程编排工具链
+                ↓
+   ┌─────────────────────────────────────────┐
+   │  1. px4_log_summary.py  → 11 节摘要     │
+   │  2. run_smarttune.py    → 自动深度分析   │
+   │  3. 针对性深挖           → 异常定位      │
+   │  4. merge_report.py     → 归档报告       │
+   └─────────────────────────────────────────┘
+                ↓
+   AI 输出: 飞行诊断 + 问题清单 + 调参指南
 ```
 
-### 基本用法
+## 能力概览
+
+| 能力 | 说明 | 工具 |
+|------|------|------|
+| 日志质量评分 | 完整性 / 激励 / 采样率 | `smarttune quality` |
+| PID 阶跃响应评级 | 上升时间 / 超调 / 振荡 | `smarttune pid` |
+| FFT 振动频谱 | 频谱分析 + 陷波滤波器建议 | `smarttune fft` |
+| 系统辨识 | 自然频率 / 阻尼比 / 带宽 / P 增益建议 | `smarttune sysid` |
+| 结构化摘要 | 机型判别 / 振动 / 跟踪 / 电源 / GPS / EKF / 空速 / 参数快照 | `px4_log_summary.py` |
+| 历史纵向对比 | 同机型跨次飞行指标趋势对比 | `flight_reports/` 归档 |
+
+## SKILL.md — 写给 AI 的指令手册
+
+这是整个 Skill 的核心。AI 助手加载它后,获得以下能力:
+
+- **7 步标准化流程** — 从获取日志到归档清理,确保每次分析可复现
+- **判读知识库** — 振动 / PID / 滤波 / EKF / 电源等量化阈值(部分源自内置 JSON 规则)
+- **调参指南原则** — 先机械后软件、按环分层、步进安全限制
+- **报告模板** — 元信息头 + 五节正文 + 自动附录
+
+### 判读阈值示例
+
+| 指标 | 理想 | 可接受 | 边缘 | 差 |
+|------|------|--------|------|----|
+| 加速度去趋势 std | <1 m/s² | 1-3 m/s² | >3 m/s² | — |
+| 上升时间 (roll/pitch) | 60-110 ms | 40-160 ms | >160 ms | — |
+| 超调量 | 0-10% | 0-15% | 15-25% | >25% |
+| 悬停油门(归一化) | <0.5 | 0.5-0.7 | >0.7 | — |
+| 日志质量评分 | ≥90 EXCELLENT | ≥75 GOOD | <55 POOR | — |
+
+阈值源自 `scripts/smarttune/knowledge/rules/` 下的 JSON 规则文件,SmartTune 运行时自动加载生成评级。
+
+## 工具链
+
+| 脚本 | 作用 | 依赖 |
+|------|------|------|
+| `scripts/px4_log_summary.py` | 11 节结构化摘要提取 | pyulog, numpy |
+| `scripts/run_smarttune.py` | 批量执行 quality/pid/fft/sysid | smarttune |
+| `scripts/merge_report.py` | 报告正文 + 附录合并 | — |
+| `scripts/stune.py` | SmartTune CLI 启动器 | click, rich, scipy, matplotlib |
+
+### 也可以独立使用
+
+这些脚本不依赖 AI,也可以作为普通命令行工具直接运行:
 
 ```bash
-# 1. 提取日志摘要(11 节结构化输出)
+# 安装依赖
+pip install -r requirements.txt
+
+# 提取摘要
 python scripts/px4_log_summary.py flight.ulg summary.txt
 
-# 2. 自动运行 SmartTune 全部分析
+# 自动分析(PID + FFT + 质量 + SysID)
 python scripts/run_smarttune.py scripts flight.ulg
 
-# 3. 合并报告正文与附录
-python scripts/merge_report.py report_body.md "flight_reports/20260729_multicopter_xxx.md"
-```
-
-### 使用 SmartTune CLI 单项分析
-
-```bash
-# PID 阶跃响应(带图表)
+# 单项分析
 python scripts/stune.py pid -i flight.ulg --visual
-
-# FFT 振动频谱
 python scripts/stune.py fft -i flight.ulg --visual
-
-# 日志质量评分
 python scripts/stune.py quality -i flight.ulg
-
-# 系统辨识
-python scripts/stune.py sysid -i flight.ulg -a roll
 ```
-
-## 分析工作流
-
-```
-.ulg 日志 → 摘要脚本 → SmartTune 自动分析 → 针对性深挖 → 归档报告
-                ↓              ↓                    ↓            ↓
-          summary.txt    stune_output.txt     deep_dive.txt   flight_reports/
-```
-
-1. **获取日志** — 本地 `.ulg` 文件或从 `logs.px4.io` 下载
-2. **摘要提取** — `px4_log_summary.py` 输出 11 节结构化摘要
-3. **自动分析** — `run_smarttune.py` 批量执行 quality / pid / fft / sysid
-4. **针对性深挖** — 按异常指标写小脚本深入分析
-5. **归档报告** — 按 `YYYYMMDD_机型_机架_序号.md` 命名,支持历史对比
 
 ## 项目结构
 
 ```
 px4-log-analysis/
-├── SKILL.md                 # 分析流程 + 判读知识库 + 报告模板
-├── requirements.txt         # Python 依赖
-├── LICENSE                   # MIT
-├── .gitignore
+├── SKILL.md                          # AI 指令手册(流程 + 知识库 + 模板)
+├── requirements.txt                  # Python 依赖
+├── LICENSE                            # MIT
 └── scripts/
-    ├── px4_log_summary.py    # 摘要提取脚本
-    ├── run_smarttune.py      # 批量运行脚本
-    ├── merge_report.py       # 报告合并脚本
-    ├── stune.py              # SmartTune CLI 启动器
-    └── smarttune/            # 内置分析引擎 (v3.0.3)
-        ├── cli.py            # 命令入口
-        ├── analyzers/        # PID / FFT / SysID 分析器
-        ├── knowledge/        # JSON 规则知识库
-        ├── models/           # 数据模型
-        ├── output/           # 输出格式化
-        ├── platform/         # 平台适配器 (PX4 / ArduPilot)
-        └── services/         # 分析编排
+    ├── px4_log_summary.py             # 摘要提取
+    ├── run_smarttune.py               # 批量分析
+    ├── merge_report.py                # 报告合并
+    ├── stune.py                       # CLI 启动器
+    └── smarttune/                     # 内置分析引擎 v3.0.3 (MIT)
+        ├── cli.py                     # 命令入口
+        ├── analyzers/                 # PID / FFT / SysID 分析器
+        ├── knowledge/rules/           # JSON 规则知识库
+        │   ├── px4/pid_rules.json
+        │   ├── px4/filter_rules.json
+        │   └── common/vibration_rules.json
+        ├── models/                    # 数据模型
+        ├── output/                    # 终端 / Markdown / HTML 输出
+        ├── platform/                  # 平台适配器 (PX4 / ArduPilot)
+        └── services/                  # 分析编排
 ```
-
-## 判读知识库
-
-内置 JSON 规则文件,SmartTune 运行时自动加载生成评级:
-
-- `knowledge/rules/px4/pid_rules.json` — PID 阶跃响应阈值
-- `knowledge/rules/px4/filter_rules.json` — 滤波器参数规则
-- `knowledge/rules/common/vibration_rules.json` — 振动分级标准
-
-### PID 阶跃响应阈值摘要
-
-| 指标 | 理想 | 可接受 | 边缘 | 差 |
-|------|------|--------|------|----|
-| 上升时间 (roll/pitch) | 60-110 ms | 40-160 ms | >160 ms | — |
-| 超调量 | 0-10% | 0-15% | 15-25% | >25% |
-| 稳定时间 | 150-350 ms | 100-600 ms | 600-1000 ms | >1000 ms |
 
 ## 依赖
 
 | 包 | 用途 |
 |----|------|
-| `pyulog` | PX4 ULog 解析 |
+| `pyulog` | PX4 ULog 二进制日志解析 |
 | `numpy` | 数值计算 |
 | `scipy` | 信号处理 (FFT / 系统辨识) |
 | `matplotlib` | 图表可视化 |
@@ -131,9 +131,7 @@ px4-log-analysis/
 
 ## 许可证
 
-[MIT License](LICENSE)
-
-SmartTune 引擎版权所有 © 2026 Raylan LIN,基于 MIT 许可证开源。
+[MIT License](LICENSE) — SmartTune 引擎版权所有 © 2026 Raylan LIN。
 
 ## 参考
 
