@@ -1,8 +1,8 @@
 # PX4 Log Analysis
 
-> AI-powered PX4 flight log analysis & PID tuning skill — analyze `.ulg` logs, diagnose vibration / tracking / EKF issues, generate tuning guides with historical trend comparison.
+> AI-powered PX4 flight log analysis & PID tuning skill — analyze `.ulg` logs for multirotor (MC) / fixed-wing (FW) / VTOL, diagnose vibration / tracking / EKF issues, generate tuning guides with historical trend comparison.
 
-> AI 驱动的 PX4 飞行日志分析与 PID 调参技能 — 解析 `.ulg` 日志,诊断振动 / 控制跟踪 / EKF 问题,输出含历史对比的调参指南。
+> AI 驱动的 PX4 飞行日志分析与 PID 调参技能 — 解析 `.ulg` 日志,支持多旋翼 (MC) / 固定翼 (FW) / VTOL 三种机型,诊断振动 / 控制跟踪 / EKF 问题,输出含历史对比的调参指南。
 
 [![AI Skill](https://img.shields.io/badge/AI-Skill-8b5cf6?logo=openai&logoColor=white)](SKILL.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
@@ -11,6 +11,7 @@
 [![ULog](https://img.shields.io/badge/Format-.ulg-3776ab)](https://docs.px4.io/main/en/log_formats.html)
 [![FFT](https://img.shields.io/badge/FFT-Notch%20Filter-ff6b35)](https://docs.px4.io/main/en/config_mc/filter_tuning.html)
 [![PID](https://img.shields.io/badge/PID-Tuning-00d2d3)](https://docs.px4.io/main/en/config_mc/pid_tuning_guide_multicopter.html)
+[![Airframe](https://img.shields.io/badge/Airframe-MC%2FFW%2FVTOL-9b59b6)](https://docs.px4.io/main/en/config_fw/)
 
 ---
 
@@ -42,11 +43,21 @@
 | 能力 | 说明 | 工具 |
 |------|------|------|
 | 日志质量评分 | 完整性 / 激励 / 采样率 | `smarttune quality` |
-| PID 阶跃响应评级 | 上升时间 / 超调 / 振荡 | `smarttune pid` |
+| PID 阶跃响应评级 | 上升时间 / 超调 / 振荡 — 自动识别 MC/FW 机型切换阈值 | `smarttune pid` |
 | FFT 振动频谱 | 频谱分析 + 陷波滤波器建议 | `smarttune fft` |
+| 滤波器传递函数 | 低通 + 陷波链 Bode 图 / -3dB 截止频率 | `smarttune filter` |
 | 系统辨识 | 自然频率 / 阻尼比 / 带宽 / P 增益建议 | `smarttune sysid` |
+| 硬件配置报告 | 飞控 / IMU / 罗盘 / 滤波器 / PID 参数概要 | `smarttune hardware` |
 | 结构化摘要 | 机型判别 / 振动 / 跟踪 / 电源 / GPS / EKF / 空速 / 参数快照 | `px4_log_summary.py` |
 | 历史纵向对比 | 同机型跨次飞行指标趋势对比 | `flight_reports/` 归档 |
+
+### 机型支持
+
+| 机型 | 参数体系 | 说明 |
+|------|----------|------|
+| 多旋翼 (MC) | `MC_*RATE_*` | P 主项 (~0.15),D ~0.003,FF 可选;`MC_*RATE_K` 总增益乘子 |
+| 固定翼 (FW) | `FW_RR_*/FW_PR_*/FW_YR_*` | FF 主项 (~0.4),P 次项 (~0.06),D 通常为 0;需考虑空速 |
+| VTOL | MC + FW 动态切换 | MC 阶段用 `MC_*` 参数,FW 阶段用 `FW_*` 参数;自动追踪 `vtol_vehicle_status` 模式切换 |
 
 ## SKILL.md — 写给 AI 的指令手册
 
@@ -69,12 +80,14 @@
 
 阈值源自 `scripts/smarttune/knowledge/rules/` 下的 JSON 规则文件,SmartTune 运行时自动加载生成评级。
 
+> **机型自适应阈值** — 上表为多旋翼 (MC) 阈值 (`pid_rules.json`)。固定翼 (FW) 使用 `pid_rules_fw.json` 中独立的阈值体系:上升时间 ideal [200, 500]ms、超调 ideal [0, 20]%、settling_time ideal [500, 1500]ms。分析器根据 `AIRFRAME_TYPE` 参数自动选择对应规则集。
+
 ## 工具链
 
 | 脚本 | 作用 | 依赖 |
 |------|------|------|
 | `scripts/px4_log_summary.py` | 11 节结构化摘要提取 | pyulog, numpy |
-| `scripts/run_smarttune.py` | 批量执行 quality/pid/fft/sysid | smarttune |
+| `scripts/run_smarttune.py` | 批量执行 quality/pid/fft/filter/sysid/hardware | smarttune |
 | `scripts/merge_report.py` | 报告正文 + 附录合并 | — |
 | `scripts/stune.py` | SmartTune CLI 启动器 | click, rich, scipy, matplotlib |
 
@@ -89,13 +102,16 @@ pip install -r requirements.txt
 # 提取摘要
 python scripts/px4_log_summary.py flight.ulg summary.txt
 
-# 自动分析(PID + FFT + 质量 + SysID)
+# 自动分析(PID + FFT + 质量 + SysID + Filter + Hardware)
 python scripts/run_smarttune.py scripts flight.ulg
 
 # 单项分析
-python scripts/stune.py pid -i flight.ulg --visual
-python scripts/stune.py fft -i flight.ulg --visual
-python scripts/stune.py quality -i flight.ulg
+python scripts/stune.py pid -i flight.ulg --visual          # PID 阶跃响应
+python scripts/stune.py fft -i flight.ulg --visual          # FFT 振动频谱
+python scripts/stune.py filter -i flight.ulg --visual       # 滤波器波特图
+python scripts/stune.py sysid -i flight.ulg                 # ARX 系统辨识
+python scripts/stune.py quality -i flight.ulg               # 日志质量评分
+python scripts/stune.py hardware -i flight.ulg              # 硬件配置报告
 ```
 
 ## 项目结构
@@ -110,17 +126,38 @@ px4-log-analysis/
     ├── run_smarttune.py               # 批量分析
     ├── merge_report.py                # 报告合并
     ├── stune.py                       # CLI 启动器
-    └── smarttune/                     # 内置分析引擎 v3.0.3 (MIT)
-        ├── cli.py                     # 命令入口
-        ├── analyzers/                 # PID / FFT / SysID 分析器
-        ├── knowledge/rules/           # JSON 规则知识库
-        │   ├── px4/pid_rules.json
-        │   ├── px4/filter_rules.json
-        │   └── common/vibration_rules.json
+    └── smarttune/                     # 内置分析引擎 v3.0.3 (MIT, PX4 专用)
+        ├── cli.py                     # 命令入口 (pid/fft/filter/sysid/quality/hardware)
+        ├── errors.py                  # 自定义异常体系
+        ├── analyzers/                 # 平台无关分析器
+        │   ├── pid_reviewer.py        #   PID 阶跃响应 (自动 MC/FW 阈值切换)
+        │   ├── fft_analyzer.py        #   FFT 振动频谱
+        │   ├── sysid_analyzer.py      #   ARX 系统辨识
+        │   ├── arx_model.py           #   ARX 模型核心算法
+        │   ├── step_response_fft.py   #   Wiener 反卷积阶跃响应 (平台无关)
+        │   └── step_response_time_domain.py  # 时域阶跃回退
+        ├── knowledge/                 # 分层知识库
+        │   ├── loader.py              #   common → px4 → user → pro 四层叠加
+        │   └── rules/
+        │       ├── common/vibration_rules.json  # 跨平台振动阈值
+        │       └── px4/
+        │           ├── pid_rules.json       # MC 多旋翼 PID 规则
+        │           ├── pid_rules_fw.json    # FW 固定翼 PID 规则
+        │           └── filter_rules.json    # 滤波器参数定义
         ├── models/                    # 数据模型
-        ├── output/                    # 终端 / Markdown / HTML 输出
-        ├── platform/                  # 平台适配器 (PX4 / ArduPilot)
+        │   ├── flight_data.py         #   统一 FlightData (含 frame_type / mode_changes)
+        │   └── analysis_result.py     #   分析结果类型 (含 SysIDResult 唯一定义)
+        ├── platform/                  # 平台适配器 (仅 PX4)
+        │   ├── base.py                #   PlatformAdapter 抽象基类
+        │   ├── registry.py            #   注册表与自动发现
+        │   └── px4/
+        │       ├── __init__.py        #   PX4 ULog 适配器 (MC/FW/VTOL 机型检测)
+        │       ├── filter_transfer.py #   滤波器传递函数 (Bode 图)
+        │       ├── hardware_report.py #   硬件配置报告
+        │       └── step_response_fft.py  # PX4 阶跃响应分派
         └── services/                  # 分析编排
+            ├── analysis.py            #   run_module 统一装配
+            └── serialize.py           #   JSON 序列化
 ```
 
 ## 依赖
@@ -142,3 +179,6 @@ px4-log-analysis/
 
 - [PX4 官方文档](https://docs.px4.io/main/en/) — Flight Review 图表判读 / PID 调参 / 滤波调参
 - [PX4 Flight Review](https://logs.px4.io/) — 在线日志分析平台
+- [多旋翼 PID 调参指南](https://docs.px4.io/main/en/config_mc/pid_tuning_guide_multicopter.html) — MC `MC_*RATE_*` 参数体系
+- [固定翼 PID 调参指南](https://docs.px4.io/main/en/config_fw/) — FW `FW_RR_*/FW_PR_*/FW_YR_*` 参数体系
+- [滤波器调参指南](https://docs.px4.io/main/en/config_mc/filter_tuning.html) — `IMU_GYRO_CUTOFF` / 陷波滤波器配置

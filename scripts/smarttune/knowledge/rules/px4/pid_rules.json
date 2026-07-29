@@ -92,5 +92,60 @@
       "D_change_per_session": "不超过 ±25%",
       "I_change_per_session": "不超过 ±25%"
     }
-  }
+  },
+
+  "symptom_rules": [
+    {
+      "rule_id": "MC_HIGH_OS",
+      "symptom": "overshoot",
+      "adjust": [{"param": "p", "action": "decrease", "factor": 0.85},
+                 {"param": "d", "action": "decrease", "factor": 0.90}],
+      "reason": "MC 超调量超阈值 - 降低 P 增益",
+      "confidence": "high"
+    },
+    {
+      "rule_id": "MC_SLOW_RISE",
+      "symptom": "rise_time",
+      "adjust": [{"param": "p", "action": "increase", "factor": 1.15},
+                 {"param": "d", "action": "decrease", "factor": 0.95}],
+      "reason": "MC 上升时间慢 - 提高 P 增益以加快响应",
+      "confidence": "high"
+    },
+    {
+      "rule_id": "MC_OSCILLATION",
+      "symptom": "oscillation_count",
+      "adjust": [{"param": "p", "action": "decrease", "factor": 0.90},
+                 {"param": "d", "action": "increase", "factor": 1.10}],
+      "reason": "MC 振荡过多 - 提高 D 增益以增加阻尼",
+      "confidence": "medium"
+    },
+    {
+      "rule_id": "MC_LONG_SETTLE",
+      "symptom": "settling_time",
+      "adjust": [{"param": "i", "action": "increase", "factor": 1.20}],
+      "reason": "MC 稳定时间长 - 提高 I 增益以加快收敛",
+      "confidence": "medium"
+    },
+    {
+      "rule_id": "MC_SS_ERROR",
+      "symptom": "steady_state_error",
+      "adjust": [{"param": "i", "action": "increase", "factor": 1.25}],
+      "reason": "MC 稳态误差 - 提高 I 增益以消除偏差",
+      "confidence": "high"
+    },
+    {
+      "rule_id": "MC_FAST_OSCIL",
+      "symptom": "fast_oscillation",
+      "adjust": [{"param": "d", "action": "decrease", "factor": 0.80}],
+      "reason": "MC 高频振荡 - 降低 D 增益",
+      "confidence": "high"
+    },
+    {
+      "rule_id": "MC_WEAK_DAMPING",
+      "symptom": "poor_damping",
+      "adjust": [{"param": "d", "action": "increase", "factor": 1.15}],
+      "reason": "MC 阻尼不足且超调 - 提高 D 增益",
+      "confidence": "medium"
+    }
+  ]
 }

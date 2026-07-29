@@ -39,37 +39,35 @@ def _fail_in_progress(progress: Progress, exc: SmartTuneError) -> NoReturn:
 @click.group()
 @click.version_option(version=__version__, prog_name="smarttune", message="%(version)s")
 def main():
-    """SmartTune — 多平台飞行日志分析与调参顾问。
+    """SmartTune — PX4 飞行日志分析与调参顾问。
 
     \b
     支持的平台：
-      ArduPilot   (.bin / .log)   — 完整支持
-      Betaflight  (.bbl / .bfl)   — 完整支持 (v2.0)
-      PX4         (.ulg)          — PID / FFT / SysID / Quality（需要 pyulog）
+      PX4  (.ulg)  — PID / FFT / SysID / Quality / Filter / Hardware
+                     支持多旋翼 (MC)、固定翼 (FW)、VTOL 三种机型
 
     \b
     工作流程：
-      1. stune analyze -i log.bin           # 综合分析
-      2. stune pid -i log.bin --visual      # PID 阶跃响应
-      3. stune fft -i log.bin --visual      # 振动频谱
-      4. stune filter -i log.bin --visual   # 滤波器波特图
-      5. stune quality -i log.bin           # 日志质量评分
-      6. stune platforms                    # 列出支持的平台
+      1. stune analyze -i log.ulg           # 综合分析
+      2. stune pid -i log.ulg --visual      # PID 阶跃响应
+      3. stune fft -i log.ulg --visual      # 振动频谱
+      4. stune filter -i log.ulg --visual   # 滤波器波特图
+      5. stune quality -i log.ulg           # 日志质量评分
+      6. stune hardware -i log.ulg          # 硬件配置报告
 
     \b
     命令：
-      analyze   综合分析（PID + FFT + 磁力计）
+      analyze   综合分析（PID + FFT + Filter + Hardware + SysID）
       quality   日志质量评分（数据完整性 / 激励 / 采样率）
-      pid       PID 阶跃响应分析
+      pid       PID 阶跃响应分析（自动识别 MC/FW 机型）
       fft       FFT 振动频谱分析
       filter    滤波器传递函数分析（波特图）
       sysid     ARX 系统辨识
       hardware  硬件配置报告
-      magfit    磁力计校准分析
 
     \b
-    平台会根据日志文件格式自动检测。
-    使用 --platform 覆盖：stune analyze -i log.bin --platform ardupilot
+    平台根据日志文件格式自动检测。
+    使用 --platform 覆盖：stune analyze -i log.ulg --platform px4
     """
     pass
 
@@ -101,7 +99,7 @@ def platforms():
 @click.option("-i", "--input", "log_file", required=True,
               type=click.Path(exists=True, path_type=Path), help="飞行日志文件")
 @click.option("--platform", "platform_name", default="auto",
-              help="平台：auto, ardupilot, betaflight, px4（默认：auto）")
+              help="平台：auto 或 px4（默认：auto）")
 @click.option("-o", "--output", "output_file", type=click.Path(path_type=Path),
               default=None, help="输出报告文件")
 @click.option("--report", "report_format",
@@ -294,7 +292,7 @@ def analyze(log_file: Path, platform_name: str, output_file: Optional[Path],
 @click.option("-i", "--input", "log_file", required=True,
               type=click.Path(exists=True, path_type=Path), help="飞行日志文件")
 @click.option("--platform", "platform_name", default="auto",
-              help="平台：auto, ardupilot, betaflight, px4（默认：auto）")
+              help="平台：auto 或 px4（默认：auto）")
 @click.option("-a", "--axis", type=click.Choice(["roll", "pitch", "yaw", "all"],
               case_sensitive=False), default="all",
               help="要分析的轴（默认：all）")
@@ -312,9 +310,9 @@ def pid(log_file: Path, platform_name: str, axis: str, visual: bool, theme: str)
 
     \b
     示例：
-      stune pid -i flight.bin                  # 所有轴
-      stune pid -i flight.bin -a roll          # 仅横滚轴
-      stune pid -i flight.bin -a roll --visual # 横滚轴带图表
+      stune pid -i flight.ulg                  # 所有轴
+      stune pid -i flight.ulg -a roll          # 仅横滚轴
+      stune pid -i flight.ulg -a roll --visual # 横滚轴带图表
     """
     _run_single_analysis("pid", log_file, platform_name, axis, visual, theme=theme)
 
@@ -327,7 +325,7 @@ def pid(log_file: Path, platform_name: str, axis: str, visual: bool, theme: str)
 @click.option("-i", "--input", "log_file", required=True,
               type=click.Path(exists=True, path_type=Path), help="飞行日志文件")
 @click.option("--platform", "platform_name", default="auto",
-              help="平台：auto, ardupilot, betaflight, px4（默认：auto）")
+              help="平台：auto 或 px4（默认：auto）")
 @click.option("--visual/--no-visual", default=False,
               help="生成 FFT 频谱图")
 @click.option("--theme", type=click.Choice(["light", "dark"], case_sensitive=False),
@@ -338,12 +336,12 @@ def fft(log_file: Path, platform_name: str, visual: bool, theme: str):
     \b
     分析陀螺仪数据以识别振动频率，并建议：
       · 振动严重程度评级（EXCELLENT/GOOD/MARGINAL/POOR）
-      · 陷波滤波器参数（INS_HNTCH_FREQ, INS_HNTCH_BW）
+      · 陷波滤波器参数（IMU_GYRO_NF0_FRQ, IMU_GYRO_NF0_BW）
 
     \b
     示例：
-      stune fft -i flight.bin          # 基本分析
-      stune fft -i flight.bin --visual # 带频谱图
+      stune fft -i flight.ulg          # 基本分析
+      stune fft -i flight.ulg --visual # 带频谱图
     """
     _run_single_analysis("fft", log_file, platform_name, "all", visual, theme=theme)
 
@@ -356,7 +354,7 @@ def fft(log_file: Path, platform_name: str, visual: bool, theme: str):
 @click.option("-i", "--input", "log_file", required=True,
               type=click.Path(exists=True, path_type=Path), help="飞行日志文件")
 @click.option("--platform", "platform_name", default="auto",
-              help="平台：auto, ardupilot, betaflight, px4（默认：auto）")
+              help="平台：auto 或 px4（默认：auto）")
 def magfit(log_file: Path, platform_name: str):
     """磁力计校准分析。
 
@@ -368,7 +366,7 @@ def magfit(log_file: Path, platform_name: str):
 
     \b
     示例：
-      stune magfit -i flight.bin
+      stune magfit -i flight.ulg
     """
     _run_single_analysis("magfit", log_file, platform_name, "all", False)
 
@@ -381,7 +379,7 @@ def magfit(log_file: Path, platform_name: str):
 @click.option("-i", "--input", "log_file", required=True,
               type=click.Path(exists=True, path_type=Path), help="飞行日志文件")
 @click.option("--platform", "platform_name", default="auto",
-              help="平台：auto, ardupilot, betaflight, px4（默认：auto）")
+              help="平台：auto 或 px4（默认：auto）")
 @click.option("-a", "--axis", type=click.Choice(["roll", "pitch", "yaw", "all"],
               case_sensitive=False), default="all",
               help="要分析的轴（默认：all）")
@@ -397,8 +395,8 @@ def sysid(log_file: Path, platform_name: str, axis: str, na: int, nb: int):
 
     \b
     示例：
-      stune sysid -i flight.bin                  # 所有轴（na=3, nb=2）
-      stune sysid -i flight.bin -a roll --na 4   # 自定义 ARX 阶数
+      stune sysid -i flight.ulg                  # 所有轴（na=3, nb=2）
+      stune sysid -i flight.ulg -a roll --na 4   # 自定义 ARX 阶数
     """
     _run_single_analysis("sysid", log_file, platform_name, axis, False, na=na, nb=nb)
 
@@ -411,7 +409,7 @@ def sysid(log_file: Path, platform_name: str, axis: str, na: int, nb: int):
 @click.option("-i", "--input", "log_file", required=True,
               type=click.Path(exists=True, path_type=Path), help="飞行日志文件")
 @click.option("--platform", "platform_name", default="auto",
-              help="平台：auto, ardupilot, betaflight, px4（默认：auto）")
+              help="平台：auto 或 px4（默认：auto）")
 def hardware(log_file: Path, platform_name: str):
     """硬件配置报告。
 
@@ -424,7 +422,7 @@ def hardware(log_file: Path, platform_name: str):
 
     \b
     示例：
-      stune hardware -i flight.bin
+      stune hardware -i flight.ulg
     """
     _run_single_analysis("hardware", log_file, platform_name, "all", False)
 
@@ -437,7 +435,7 @@ def hardware(log_file: Path, platform_name: str):
 @click.option("-i", "--input", "log_file", required=True,
               type=click.Path(exists=True, path_type=Path), help="飞行日志文件")
 @click.option("--platform", "platform_name", default="auto",
-              help="平台：auto, ardupilot, betaflight, px4（默认：auto）")
+              help="平台：auto 或 px4（默认：auto）")
 @click.option("--gyro-filter", type=float, default=None,
               help="覆盖 GYRO_FILTER 截止频率（Hz）")
 @click.option("--notch-freq", type=float, default=None,
@@ -454,14 +452,14 @@ def filter_cmd(log_file: Path, platform_name: str, gyro_filter: Optional[float],
     \b
     两种模式：
       - 自动模式（默认）：从日志参数推导滤波器配置
-        （平台特定：ArduPilot 使用 INS_HNTCH_*，BF 使用 gyro_lowpass_hz / notch）
+        （PX4 使用 IMU_GYRO_CUTOFF / IMU_GYRO_NF0_FRQ 等参数）
       - 手动模式：直接指定 --gyro-filter/--notch-freq
 
     \b
     示例：
-      stune filter -i flight.bin                         # 自动推导
-      stune filter -i flight.bin --no-auto --gyro-filter 20 --visual
-      stune filter -i flight.bin --notch-freq 80 --visual
+      stune filter -i flight.ulg                         # 自动推导
+      stune filter -i flight.ulg --no-auto --gyro-filter 20 --visual
+      stune filter -i flight.ulg --notch-freq 80 --visual
     """
     from smarttune.services.analysis import analyze_filter  # D1 修复：调用 services 层
 
@@ -548,7 +546,7 @@ def filter_cmd(log_file: Path, platform_name: str, gyro_filter: Optional[float],
 @click.option("-i", "--input", "log_file", required=True,
               type=click.Path(exists=True, path_type=Path), help="飞行日志文件")
 @click.option("--platform", "platform_name", default="auto",
-              help="平台：auto, ardupilot, betaflight, px4（默认：auto）")
+              help="平台：auto 或 px4（默认：auto）")
 @click.option("-o", "--output", "output_file", type=click.Path(path_type=Path),
               default=None, help="输出质量报告文件（可选）")
 def quality(log_file: Path, platform_name: str, output_file: Optional[Path]):
@@ -563,8 +561,8 @@ def quality(log_file: Path, platform_name: str, output_file: Optional[Path]):
 
     \b
     示例：
-      stune quality -i flight.bin
-      stune quality -i flight.bin -o quality_report.txt
+      stune quality -i flight.ulg
+      stune quality -i flight.ulg -o quality_report.txt
     """
     from smarttune.services.analysis import get_log_quality
 

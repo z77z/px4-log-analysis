@@ -50,7 +50,7 @@ def _load_json_dir(directory: Path) -> Dict[str, Any]:
 
 
 class KnowledgeBase:
-    def __init__(self, platform: str = "ardupilot"):
+    def __init__(self, platform: str = "px4"):
         self.platform = platform
         self._rules: Dict[str, Any] = {}
         self._source_info: Dict[str, bool] = {

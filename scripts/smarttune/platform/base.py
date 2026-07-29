@@ -33,17 +33,17 @@ class PlatformAdapter(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """平台标识符: "ardupilot" | "betaflight" | "px4" """
+        """平台标识符: "px4" """
 
     @property
     @abstractmethod
     def display_name(self) -> str:
-        """用户可见名: "ArduPilot" | "Betaflight" | "PX4" """
+        """用户可见名: "PX4" """
 
     @property
     @abstractmethod
     def supported_extensions(self) -> list[str]:
-        """支持的日志文件扩展名列表: [".bin", ".log"] 等"""
+        """支持的日志文件扩展名列表: [".ulg", ".ulog"] 等"""
 
     # ── 日志检测与解析 ──────────────────────────────────────
 
@@ -94,18 +94,16 @@ class PlatformAdapter(ABC):
 
         Examples
         --------
-        ArduPilot:  "pid.roll.p"  → "ATC_RAT_RLL_P"
-        Betaflight: "pid.roll.p"  → "pid_roll_p"
-        PX4:        "pid.roll.p"  → "MC_ROLLRATE_P"
+        PX4 (MC):  "pid.roll.p"  → "MC_ROLLRATE_P"
+        PX4 (FW):  "pid.roll.p"  → "FW_RR_P"
         """
 
     @abstractmethod
     def map_param_to_generic(self, platform_name: str) -> str:
         """平台参数名 → 通用参数名。
 
-        ArduPilot:  "ATC_RAT_RLL_P"  → "pid.roll.p"
-        Betaflight: "pid_roll_p"     → "pid.roll.p"
-        PX4:        "MC_ROLLRATE_P"  → "pid.roll.p"
+        PX4 (MC):  "MC_ROLLRATE_P"  → "pid.roll.p"
+        PX4 (FW):  "FW_RR_P"        → "pid.roll.p"
         """
 
     # ── 能力声明 ────────────────────────────────────────────
@@ -119,7 +117,7 @@ class PlatformAdapter(ABC):
             "fft"       - FFT 频谱分析
             "filter"    - 滤波器传递函数分析
             "sysid"     - ARX 系统辨识
-            "magfit"    - 磁力计校准分析
+            "magfit"    - 磁力计校准分析（PX4 暂未实现）
             "hardware"  - 硬件配置报告
             "quality"   - 日志质量评分
 
@@ -130,9 +128,7 @@ class PlatformAdapter(ABC):
 
         Examples
         --------
-        ArduPilot:  {"pid", "fft", "filter", "sysid", "magfit", "hardware", "quality"}
-        Betaflight: {"pid", "fft", "filter", "hardware", "quality"}
-        PX4:        {"pid", "fft", "filter", "magfit", "hardware", "quality"}
+        PX4: {"pid", "fft", "filter", "sysid", "hardware", "quality"}
         """
 
     # ── 平台特有分析器注册（可选）────────────────────────────
@@ -140,8 +136,7 @@ class PlatformAdapter(ABC):
     def extra_analyzers(self) -> list:
         """返回平台特有的分析器实例列表。
 
-        默认返回空列表。平台可以注册自己的分析器，
-        如 Betaflight 的 FeedforwardAnalyzer。
+        默认返回空列表。PX4 当前无额外分析器。
 
         Returns
         -------

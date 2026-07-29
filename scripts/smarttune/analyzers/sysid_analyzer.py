@@ -7,7 +7,6 @@ sysid_analyzer.py - 系统辨识分析模块
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -15,66 +14,7 @@ from scipy import signal
 
 from smarttune.errors import InsufficientPIDDataError, AnalysisError
 from smarttune.analyzers.arx_model import arx_identify, estimate_delay
-
-
-# ---------------------------------------------------------------------------
-# 数据结构
-# ---------------------------------------------------------------------------
-
-@dataclass
-class SysIDResult:
-    """单轴系统辨识结果。"""
-    axis: str
-    
-    # ARX 模型参数
-    na: int
-    nb: int
-    delay_samples: int
-    a_coeffs: np.ndarray = field(repr=False)
-    b_coeffs: np.ndarray = field(repr=False)
-    
-    # 连续系统参数（二阶近似）
-    natural_freq_hz: float
-    damping_ratio: float
-    dc_gain: float
-    
-    # PID 带宽建议
-    suggested_bandwidth_hz: float
-    suggested_p_gain: float
-    
-    # 拟合质量
-    fit_quality_percent: float
-    
-    # 原始数据信息
-    sample_rate_hz: float
-    data_points: int
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """转换为字典格式（用于输出）。"""
-        return {
-            "axis": self.axis,
-            "arx_model": {
-                "na": self.na,
-                "nb": self.nb,
-                "delay_samples": self.delay_samples,
-                "a_coeffs": self.a_coeffs.tolist(),
-                "b_coeffs": self.b_coeffs.tolist(),
-            },
-            "continuous_approximation": {
-                "natural_freq_hz": round(self.natural_freq_hz, 2),
-                "damping_ratio": round(self.damping_ratio, 3),
-                "dc_gain": round(self.dc_gain, 3),
-            },
-            "pid_recommendations": {
-                "suggested_bandwidth_hz": round(self.suggested_bandwidth_hz, 1),
-                "suggested_p_gain": round(self.suggested_p_gain, 4),
-            },
-            "fit_quality": {
-                "fit_percent": round(self.fit_quality_percent, 1),
-                "sample_rate_hz": round(self.sample_rate_hz, 1),
-                "data_points": self.data_points,
-            },
-        }
+from smarttune.models.analysis_result import SysIDResult  # R5: 统一定义
 
 
 # ---------------------------------------------------------------------------

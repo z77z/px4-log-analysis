@@ -87,7 +87,7 @@ class ParseError(SmartTuneError):
 class LogFormatError(ParseError):
     code = "E2001"
     message = "无法识别的日志格式"
-    hint = "SmartTune 支持 ArduPilot (.bin)、Betaflight (.bbl) 和 PX4 (.ulg) 日志。"
+    hint = "SmartTune 支持 PX4 (.ulg) 日志。"
 
 class LogVersionError(ParseError):
     code = "E2002"

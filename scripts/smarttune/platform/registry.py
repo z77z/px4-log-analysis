@@ -68,7 +68,7 @@ def get_adapter(name: str) -> PlatformAdapter:
     Parameters
     ----------
     name : str
-        平台名称: "ardupilot", "betaflight", "px4"
+        平台名称: "px4"
 
     Returns
     -------
@@ -167,16 +167,11 @@ def resolve_adapter(platform: str, log_path: Path) -> PlatformAdapter:
 # ---------------------------------------------------------------------------
 
 def _auto_discover():
-    """导入所有内置平台模块，触发 @register 装饰器。"""
+    """导入内置平台模块，触发 @register 装饰器。
+
+    项目定位为 PX4 专用，仅加载 PX4 适配器。
+    """
     # 延迟导入，避免循环依赖
-    try:
-        import smarttune.platform.ardupilot  # noqa: F401
-    except ImportError:
-        logger.debug("ArduPilot 适配器不可用")
-    try:
-        import smarttune.platform.betaflight  # noqa: F401
-    except ImportError:
-        logger.debug("Betaflight 适配器不可用")
     try:
         import smarttune.platform.px4  # noqa: F401
     except ImportError:

@@ -17,8 +17,7 @@ import numpy as np
 class AxisPIDSignal:
     """单轴 PID 信号 — 最大公约数抽象。
 
-    所有平台（ArduPilot / Betaflight / PX4）都有 desired 和 actual，
-    P/I/D/FF 项可选（部分平台日志不一定全部记录）。
+    desired 和 actual 为必填；P/I/D/FF 项可选（日志不一定全部记录）。
     """
 
     timestamp_s: np.ndarray          # 秒，从日志起始计
@@ -27,7 +26,7 @@ class AxisPIDSignal:
     p_term: Optional[np.ndarray] = None
     i_term: Optional[np.ndarray] = None
     d_term: Optional[np.ndarray] = None
-    ff_term: Optional[np.ndarray] = None   # Betaflight 前馈 / ArduPilot FF
+    ff_term: Optional[np.ndarray] = None   # 前馈（FW 主项 / MC 可选）
     output: Optional[np.ndarray] = None    # 控制器总输出
 
     @property
@@ -45,7 +44,7 @@ class AxisPIDSignal:
 class ModeChange:
     """飞行模式切换事件。
 
-    raw_mode 保留平台原始名称（如 ArduPilot "STABILIZE"、BF "ANGLE"、PX4 "Position"），
+    raw_mode 保留平台原始名称（如 PX4 "VTOL_MC"、"VTOL_FW"、"Position"），
     mode_name 映射到统一命名，用于分析引擎切分飞行段。
     """
 
@@ -59,8 +58,8 @@ class FlightData:
     """统一飞行数据结构 — 分析引擎的唯一输入。
 
     设计原则：
-    - 必选字段 = 所有平台都能提供的最大公约数
-    - 可选字段 = 部分平台可能没有（如 BF 无磁力计）
+    - 必选字段 = PX4 日志能提供的最大公约数
+    - 可选字段 = 部分日志可能没有（如磁力计、电池数据）
     - extras = 平台特有数据的逃逸舱，由平台特化规则消费
 
     单位约定：
@@ -73,9 +72,9 @@ class FlightData:
     """
 
     # ── 元信息 ──────────────────────────────────────────────
-    platform: str                           # "ardupilot" | "betaflight" | "px4"
+    platform: str                           # "px4"
     firmware_version: str = ""
-    frame_type: Optional[str] = None        # "quad", "hex", "octo", "tri", "heli", ...
+    frame_type: Optional[str] = None        # "quad", "hex", "octo", "tri", "heli", "fixed_wing", "vtol_*", ...
     board_name: Optional[str] = None        # 飞控板型号
     log_file: str = ""                      # 原始日志路径
 

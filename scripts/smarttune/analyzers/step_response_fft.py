@@ -1,8 +1,8 @@
 """
-阶跃响应估计（ArduPilot 专用 — 对齐 WebTools PIDReview.js / Plasmatree PID-Analyzer）。
+阶跃响应估计（平台无关 — 对齐 WebTools PIDReview.js / Plasmatree PID-Analyzer）。
 
-本模块在 pid_reviewer.py 中按 platform 动态分派：
-  smarttune.platform.ardupilot.step_response_fft
+本模块原位于 platform/ardupilot/step_response_fft.py，现移至 analyzers/
+作为平台无关实现。各平台（如 PX4）的 step_response_fft 分派模块从此处导入。
 
 算法流程（完全复现 WebTools redraw_step + Libraries/Array_Math.js + Libraries/fft.js；
 2026-06-11 已对照上游真实源码逐项核验：hanning / 缩放 / TarMax≥20（加窗后）/

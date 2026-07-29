@@ -300,7 +300,11 @@ def run_module(
                 code=data_code,
             )
         from smarttune.analyzers.pid_reviewer import PIDReviewer
-        reviewer = PIDReviewer(knowledge=kb.get("pid_rules", {}))
+        # 根据 frame_type 选择 MC 或 FW 知识库规则
+        # VTOL 默认使用 MC 规则（MC 阶段为主），FW 阶段分段分析为后续迭代
+        is_fw = fd.frame_type in ("fixed_wing",)
+        pid_kb = kb.get("pid_rules_fw" if is_fw else "pid_rules", {})
+        reviewer = PIDReviewer(knowledge=pid_kb)
         return reviewer.analyze(fd, axis=_axis)
 
     if module == "fft":
@@ -318,15 +322,13 @@ def run_module(
         return analyzer.analyze(fd)
 
     if module == "magfit":
-        if not fd.has_mag:
-            raise SmartTuneError(
-                message="日志中未找到磁力计数据",
-                hint="磁力计分析需要罗盘数据",
-                code=data_code,
-            )
-        from smarttune.analyzers.magfit import MAGFit
-        magfit = MAGFit(knowledge=kb.get("magfit_rules", {}))
-        return magfit.analyze(fd)
+        # PX4 不支持磁力计校准分析（capabilities() 未声明 "magfit"）
+        # _require_capability 已在上方拦截，此处不可达
+        raise SmartTuneError(
+            message="当前平台不支持磁力计校准分析",
+            hint="PX4 平台未实现 magfit 能力",
+            code=data_code,
+        )
 
     if module == "sysid":
         if not fd.pid:

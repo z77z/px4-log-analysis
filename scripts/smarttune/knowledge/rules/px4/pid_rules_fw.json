@@ -1,0 +1,143 @@
+{
+  "schema_version": "1.0",
+  "px4_version_min": "1.13",
+  "description": "PX4 固定翼 Rate PID 调参知识库 — FW_RR_*/FW_PR_*/FW_YR_* 参数体系",
+
+  "frame_type": ["fixed_wing", "vtol_standard", "vtol_tiltrotor",
+                 "vtol_tailsitter", "vtol_tiltwing"],
+  "frame_phase": "fw",
+
+  "axis": ["roll", "pitch", "yaw"],
+
+  "pid_bounds": {
+    "p":  [0.0, 0.3],
+    "i":  [0.0, 0.5],
+    "d":  [0.0, 0.005],
+    "ff": [0.0, 1.0]
+  },
+
+  "settle_band": 0.15,
+
+  "thresholds": {
+    "rise_time_ms": {
+      "roll":  {"ideal": [200, 500], "acceptable": [150, 800], "unit": "ms"},
+      "pitch": {"ideal": [200, 500], "acceptable": [150, 800], "unit": "ms"},
+      "yaw":   {"ideal": [300, 700], "acceptable": [200, 1000], "unit": "ms"}
+    },
+    "overshoot_percent": {
+      "ideal": [0, 20],
+      "acceptable": [0, 30],
+      "marginal": [30, 50],
+      "critical": [50, 100],
+      "unit": "%"
+    },
+    "settling_time_ms": {
+      "ideal": [500, 1500],
+      "acceptable": [300, 2500],
+      "marginal": [2500, 4000],
+      "critical": [4000],
+      "unit": "ms"
+    },
+    "oscillation_count": {
+      "ideal": [0, 1],
+      "acceptable": [1, 2],
+      "marginal": [2, 3],
+      "critical": [3]
+    }
+  },
+
+  "tuning_rules": {
+    "default_pid_ranges": {
+      "FW_RR_P":  {"min": 0.0,  "max": 0.3,  "typical": 0.06, "unit": "gain"},
+      "FW_RR_I":  {"min": 0.0,  "max": 0.5,  "typical": 0.1,  "unit": "gain"},
+      "FW_RR_D":  {"min": 0.0,  "max": 0.005,"typical": 0.0,  "unit": "gain"},
+      "FW_RR_FF": {"min": 0.0,  "max": 1.0,  "typical": 0.4,  "unit": "gain"},
+      "FW_PR_P":  {"min": 0.0,  "max": 0.3,  "typical": 0.06, "unit": "gain"},
+      "FW_PR_I":  {"min": 0.0,  "max": 0.5,  "typical": 0.1,  "unit": "gain"},
+      "FW_PR_D":  {"min": 0.0,  "max": 0.005,"typical": 0.0,  "unit": "gain"},
+      "FW_PR_FF": {"min": 0.0,  "max": 1.0,  "typical": 0.4,  "unit": "gain"},
+      "FW_YR_P":  {"min": 0.0,  "max": 0.3,  "typical": 0.05, "unit": "gain"},
+      "FW_YR_I":  {"min": 0.0,  "max": 0.4,  "typical": 0.1,  "unit": "gain"},
+      "FW_YR_D":  {"min": 0.0,  "max": 0.005,"typical": 0.0,  "unit": "gain"},
+      "FW_YR_FF": {"min": 0.0,  "max": 1.0,  "typical": 0.3,  "unit": "gain"}
+    },
+    "px4_notes": [
+      "FW 的 FF (前馈) 是主项，P 是次项，与 MC 的 P 主项相反 — 调参顺序应为 FF → P → I",
+      "FW 的 D 项通常为 0 — 空气动力阻尼已足够，D 项容易放大结构共振",
+      "FW 响应慢于 MC — 典型时间常数 TC=0.5s，上升时间 200-500ms 为理想区间",
+      "FW 调参需考虑空速 — 低空速下舵效减弱，PID 增益需按空速缩放（FW_*_RMAX 限幅）",
+      "VTOL 在 FW 阶段使用 FW_* 参数，在 MC 阶段切换为 MC_*RATE_* 参数"
+    ]
+  },
+
+  "experience_rules": {
+    "symptom_to_param": {
+      "过冲大":      {"primary_action": "降低 FW_*_FF", "secondary_action": "降低 FW_*_P"},
+      "响应慢":      {"primary_action": "提高 FW_*_FF", "secondary_action": "检查 FW_*_RMAX 限幅"},
+      "稳态误差":    {"primary_action": "提高 FW_*_I", "secondary_action": "检查配平 (TRIM_*)"},
+      "高频抖振":    {"primary_action": "降低 FW_*_P", "secondary_action": "检查 IMU_GYRO_CUTOFF"},
+      "外扰恢复慢":  {"primary_action": "提高 FW_*_FF", "secondary_action": "适当提高 FW_*_P"}
+    },
+    "tuning_sequence": {
+      "1_filters": "先确认 IMU_GYRO_CUTOFF 与振动水平匹配（FW 振动通常低于 MC）",
+      "2_ff_first": "先调 FW_*_FF — 在 Manual/Stabilized 模式打杆测试前馈跟踪",
+      "3_p_minor": "FF 满意后再微调 FW_*_P — P 是次项，主要补偿瞬态误差",
+      "4_i_trim": "调 FW_*_I 补偿配平偏移 — I 用于消除稳态误差，勿过大",
+      "5_verify": "验证各空速段（巡航/起降/机动）的响应"
+    }
+  },
+
+  "param_change_rules": {
+    "step_size": {
+      "FF": {"increment": 0.05, "max_change_per_step": 0.15},
+      "P":  {"increment": 0.01, "max_change_per_step": 0.03},
+      "I":  {"increment": 0.02, "max_change_per_step": 0.05},
+      "D":  {"increment": 0.0005, "max_change_per_step": 0.001}
+    },
+    "safety_limits": {
+      "FF_change_per_session": "不超过 ±25%",
+      "P_change_per_session": "不超过 ±25%",
+      "I_change_per_session": "不超过 ±25%"
+    }
+  },
+
+  "symptom_rules": [
+    {
+      "rule_id": "FW_HIGH_OS",
+      "symptom": "overshoot",
+      "adjust": [{"param": "ff", "action": "decrease", "factor": 0.85},
+                 {"param": "p", "action": "decrease", "factor": 0.90}],
+      "reason": "FW 超调量超阈值 - 降低 FF 前馈增益（FW 主项）",
+      "confidence": "high"
+    },
+    {
+      "rule_id": "FW_SLOW_RISE",
+      "symptom": "rise_time",
+      "adjust": [{"param": "ff", "action": "increase", "factor": 1.15},
+                 {"param": "p", "action": "increase", "factor": 1.05}],
+      "reason": "FW 上升时间慢 - 提高 FF 前馈增益以加快响应",
+      "confidence": "high"
+    },
+    {
+      "rule_id": "FW_OSCILLATION",
+      "symptom": "oscillation_count",
+      "adjust": [{"param": "p", "action": "decrease", "factor": 0.85}],
+      "reason": "FW 振荡 - 降低 P 增益（FW 通常 D=0，不加 D）",
+      "confidence": "medium"
+    },
+    {
+      "rule_id": "FW_LONG_SETTLE",
+      "symptom": "settling_time",
+      "adjust": [{"param": "i", "action": "increase", "factor": 1.20}],
+      "reason": "FW 稳定时间长 - 提高 I 增益以消除配平偏差",
+      "confidence": "medium"
+    },
+    {
+      "rule_id": "FW_SS_ERROR",
+      "symptom": "steady_state_error",
+      "adjust": [{"param": "i", "action": "increase", "factor": 1.15}],
+      "reason": "FW 稳态误差 - 提高 I 增益以补偿配平偏移",
+      "confidence": "high"
+    }
+  ]
+}

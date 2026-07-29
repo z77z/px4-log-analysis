@@ -6,8 +6,8 @@ PID 阶跃响应分析引擎 — 平台无关。
 消费 FlightData，输出 PIDAnalysisResult（含 ParamRef 参数引用）。
 所有平台特有的参数名翻译由输出层通过 PlatformAdapter.map_param_to_platform() 完成。
 
-核心算法（阶跃检测、指标计算、诊断规则）继承自 v1 ArduPilot-only 版，重构为多平台架构。
-变更点仅为输入/输出接口。
+核心算法（阶跃检测、指标计算、诊断规则）基于 Wiener 反卷积阶跃响应估计，
+支持 MC/FW/VTOL 机型（通过知识库规则切换阈值和调参策略）。
 """
 
 from __future__ import annotations
@@ -371,38 +371,77 @@ class PIDReviewer:
 
     def __init__(self, knowledge: Optional[Dict[str, Any]] = None) -> None:
         self._knowledge = knowledge or {}
-        # 阈值形状校验：analyze() 按轴取 thresholds[axis][metric]["max"]（标量形）。
-        # 各平台 pid_rules.json 的 "thresholds" 块却是按指标组织、用 ideal/acceptable
-        # 区间形（thresholds[metric][axis]），消费方读不到 → 旧实现静默退化为
-        # 全轴硬编码兜底值。这里检测形状：非消费方可用形状时，回退到形状正确的
-        # _DEFAULT_THRESHOLDS（按轴 + min/max/ideal），而不是产出空 thresholds。
+        # 阈值形状校验 + 转换（R6 修复）：
+        # KB 中 thresholds 按 "指标→轴" 组织，用 ideal/acceptable 区间形：
+        #   {"rise_time_ms": {"roll": {"ideal": [60,110], "acceptable": [40,160]}}}
+        # 消费方期望按 "轴→指标" 组织，用 min/max/ideal 标量形：
+        #   {"roll": {"rise_time_ms": {"min":40, "max":160, "ideal":85}}}
+        # 这里检测 KB 形状：若为区间形则转换；若已为标量形则原样使用；
+        # 否则回退到 _DEFAULT_THRESHOLDS。
         kb_thresholds = self._knowledge.get("thresholds", {})
-        self._thresholds = (
-            kb_thresholds if self._is_axis_threshold_shape(kb_thresholds)
-            else _DEFAULT_THRESHOLDS
-        )
-        tuning_rules_raw = self._knowledge.get("tuning_rules")
-        self._rules = (
-            tuning_rules_raw if isinstance(tuning_rules_raw, list) and tuning_rules_raw
-            else _TUNING_RULES
-        )
+        self._thresholds = self._normalize_thresholds(kb_thresholds)
+        # 调参规则（R6 修复）：KB 中 tuning_rules 是 dict（参数范围），
+        # 真正的症状规则在 symptom_rules 字段（list 形）。
+        symptom_rules = self._knowledge.get("symptom_rules")
+        if isinstance(symptom_rules, list) and symptom_rules:
+            self._rules = symptom_rules
+        else:
+            # 回退：尝试旧字段名 tuning_rules（若为 list 则使用，否则用硬编码）
+            tuning_rules_raw = self._knowledge.get("tuning_rules")
+            self._rules = (
+                tuning_rules_raw if isinstance(tuning_rules_raw, list) and tuning_rules_raw
+                else _TUNING_RULES
+            )
         self._bounds = self._knowledge.get("pid_bounds", {}) or _DEFAULT_BOUNDS
         self._settle_band = float(self._knowledge.get("settle_band", 0.10))
 
     @staticmethod
-    def _is_axis_threshold_shape(thresholds: Any) -> bool:
-        """判断 thresholds 是否为消费方可用形状：
-        至少有一个轴键（roll/pitch/yaw），其值含带 "max" 标量的指标字典。
+    def _normalize_thresholds(kb_thresholds: Any) -> Dict[str, Dict[str, Dict[str, float]]]:
+        """将 KB 阈值统一转换为消费方可用的 "轴→指标→{min,max,ideal}" 形。
+
+        支持两种输入形状：
+        1. 区间形（KB JSON 现状）：{metric: {axis: {"ideal":[a,b], "acceptable":[c,d]}}}
+           转换：min=acceptable[0], max=acceptable[1], ideal=(ideal[0]+ideal[1])/2
+        2. 标量形（消费方原生）：{axis: {metric: {"min":v, "max":v, "ideal":v}}}
+           原样返回。
+        3. 其它（不可用）→ 返回空 dict，调用方回退到 _DEFAULT_THRESHOLDS。
         """
-        if not isinstance(thresholds, dict):
-            return False
+        if not isinstance(kb_thresholds, dict) or not kb_thresholds:
+            return _DEFAULT_THRESHOLDS
+
+        # 形状 2：首层键是轴名（roll/pitch/yaw），值含 "max" 标量
         for ax in ("roll", "pitch", "yaw"):
-            axis_block = thresholds.get(ax)
+            axis_block = kb_thresholds.get(ax)
             if isinstance(axis_block, dict):
                 for metric_v in axis_block.values():
                     if isinstance(metric_v, dict) and "max" in metric_v:
-                        return True
-        return False
+                        # 已是标量形
+                        return kb_thresholds  # type: ignore[return-value]
+
+        # 形状 1：首层键是指标名，二层是轴名，三层含 ideal/acceptable 区间
+        result: Dict[str, Dict[str, Dict[str, float]]] = {
+            ax: {} for ax in ("roll", "pitch", "yaw")
+        }
+        converted_any = False
+        for metric, axis_dict in kb_thresholds.items():
+            if not isinstance(axis_dict, dict):
+                continue
+            for axis, ranges in axis_dict.items():
+                if axis not in result or not isinstance(ranges, dict):
+                    continue
+                ideal = ranges.get("ideal")
+                acceptable = ranges.get("acceptable")
+                if not (isinstance(ideal, (list, tuple)) and len(ideal) == 2
+                        and isinstance(acceptable, (list, tuple)) and len(acceptable) == 2):
+                    continue
+                result[axis][metric] = {
+                    "min": float(acceptable[0]),
+                    "max": float(acceptable[1]),
+                    "ideal": (float(ideal[0]) + float(ideal[1])) / 2.0,
+                }
+                converted_any = True
+
+        return result if converted_any else _DEFAULT_THRESHOLDS
 
     def analyze(self, flight_data: FlightData, axis: Optional[str] = None) -> PIDAnalysisResult:
         """分析 PID 阶跃响应。
@@ -455,9 +494,7 @@ class PIDReviewer:
         step_count = len(step_indices)
 
         # 4. 频域阶跃响应（按平台动态分派）
-        #    platform/ardupilot/step_response_fft.py  → WebTools 对齐
-        #    platform/betaflight/step_response_fft.py  → PID Toolbox PTstepcalc 对齐
-        #    platform/px4/step_response_fft.py         → 复用 AP（WebTools 对齐）
+        #    platform/px4/step_response_fft.py → 平台无关实现（WebTools 对齐）
         #    低采样率（< 20 Hz）时回退到时域阶跃平均（C7 修复：接线回退路径）
         fft_step = {}
         # 构造旧版 get_pid_data 返回格式
@@ -502,12 +539,13 @@ class PIDReviewer:
                     "GyrZ": flight_data.gyro[:, 2],
                 }
 
-            _VALID_PLATFORMS = {"ardupilot", "betaflight", "px4"}
+            # PX4 专用：直接导入 PX4 的 step_response_fft 分派模块
+            # （该模块从 analyzers/step_response_fft.py 导入平台无关实现）
             platform_key = flight_data.platform.lower()
-            if platform_key not in _VALID_PLATFORMS:
+            if platform_key != "px4":
                 _log.warning(
-                    "未知平台 %r，无法分派 FFT 阶跃响应；"
-                    "期望为 %s 之一", flight_data.platform, _VALID_PLATFORMS,
+                    "未知平台 %r，无法分派 FFT 阶跃响应；期望为 px4",
+                    flight_data.platform,
                 )
             else:
                 try:

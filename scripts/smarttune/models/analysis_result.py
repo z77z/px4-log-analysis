@@ -11,6 +11,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+try:
+    import numpy as np  # noqa: F401  — SysIDResult.a_coeffs/b_coeffs 类型标注用
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
+
 
 # ---------------------------------------------------------------------------
 # 通用评估等级
@@ -221,18 +227,66 @@ class MagFitResult:
 
 
 # ---------------------------------------------------------------------------
-# 系统辨识结果
+# 系统辨识结果（R5 统一定义：从 analyzers/sysid_analyzer.py 迁移至此，
+# 作为 SysIDResult 的唯一定义；sysid_analyzer.py 改为从此处导入）
 # ---------------------------------------------------------------------------
 
 @dataclass
 class SysIDResult:
-    """系统辨识（ARX 模型）结果。"""
+    """单轴系统辨识（ARX 模型）结果。"""
     axis: str
-    natural_freq_hz: float = 0.0
-    damping_ratio: float = 0.0
-    bandwidth_hz: float = 0.0
-    model_order: str = ""      # 例如 "ARX(3,2)"
-    fit_quality: float = 0.0   # R² 或类似指标
+
+    # ARX 模型参数
+    na: int
+    nb: int
+    delay_samples: int
+    a_coeffs: Any = field(repr=False)   # np.ndarray
+    b_coeffs: Any = field(repr=False)   # np.ndarray
+
+    # 连续系统参数（二阶近似）
+    natural_freq_hz: float
+    damping_ratio: float
+    dc_gain: float
+
+    # PID 带宽建议
+    suggested_bandwidth_hz: float
+    suggested_p_gain: float
+
+    # 拟合质量
+    fit_quality_percent: float
+
+    # 原始数据信息
+    sample_rate_hz: float
+    data_points: int
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式（用于输出/序列化）。"""
+        a_list = self.a_coeffs.tolist() if hasattr(self.a_coeffs, "tolist") else list(self.a_coeffs)
+        b_list = self.b_coeffs.tolist() if hasattr(self.b_coeffs, "tolist") else list(self.b_coeffs)
+        return {
+            "axis": self.axis,
+            "arx_model": {
+                "na": self.na,
+                "nb": self.nb,
+                "delay_samples": self.delay_samples,
+                "a_coeffs": a_list,
+                "b_coeffs": b_list,
+            },
+            "continuous_approximation": {
+                "natural_freq_hz": round(self.natural_freq_hz, 2),
+                "damping_ratio": round(self.damping_ratio, 3),
+                "dc_gain": round(self.dc_gain, 3),
+            },
+            "pid_recommendations": {
+                "suggested_bandwidth_hz": round(self.suggested_bandwidth_hz, 1),
+                "suggested_p_gain": round(self.suggested_p_gain, 4),
+            },
+            "fit_quality": {
+                "fit_percent": round(self.fit_quality_percent, 1),
+                "sample_rate_hz": round(self.sample_rate_hz, 1),
+                "data_points": self.data_points,
+            },
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +320,7 @@ class FullAnalysisResult:
     fft: Optional[FFTAnalysisResult] = None
     filter: Optional[FilterAnalysisResult] = None
     magfit: Optional[MagFitResult] = None
-    sysid: List[SysIDResult] = field(default_factory=list)
+    sysid: Dict[str, "SysIDResult"] = field(default_factory=dict)
     hardware: Optional[HardwareReport] = None
 
     @property
