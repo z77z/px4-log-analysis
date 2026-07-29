@@ -1,7 +1,9 @@
 {
   "schema_version": "1.0",
-  "px4_version_min": "1.13",
+  "px4_version_min": "1.15",
   "description": "PX4 固定翼 Rate PID 调参知识库 — FW_RR_*/FW_PR_*/FW_YR_* 参数体系",
+
+  "kb_caveat": "本 KB 数值并非 PX4 官方文档直接给出的量化阈值。PX4 官方 fixed-wing tuning 文档仅给出调参建议（FF 为主项、典型 FF≈0.4、P 起始 0.04-0.06、I 起始 0.01、D 通常为 0）而无量化响应指标。thresholds 字段由控制理论反推（固定翼响应慢于多旋翼 3-5x）+ 社区共识综合得出。",
 
   "frame_type": ["fixed_wing", "vtol_standard", "vtol_tiltrotor",
                  "vtol_tailsitter", "vtol_tiltwing"],
@@ -25,24 +27,24 @@
       "yaw":   {"ideal": [300, 700], "acceptable": [200, 1000], "unit": "ms"}
     },
     "overshoot_percent": {
-      "ideal": [0, 20],
-      "acceptable": [0, 30],
-      "marginal": [30, 50],
-      "critical": [50, 100],
-      "unit": "%"
+      "roll":  {"ideal": [0, 20], "acceptable": [0, 30], "marginal": [30, 50], "critical": [50, 100], "unit": "%"},
+      "pitch": {"ideal": [0, 20], "acceptable": [0, 30], "marginal": [30, 50], "critical": [50, 100], "unit": "%"},
+      "yaw":   {"ideal": [0, 25], "acceptable": [0, 35], "marginal": [35, 55], "critical": [55, 100], "unit": "%"}
     },
     "settling_time_ms": {
-      "ideal": [500, 1500],
-      "acceptable": [300, 2500],
-      "marginal": [2500, 4000],
-      "critical": [4000],
-      "unit": "ms"
+      "roll":  {"ideal": [500, 1500], "acceptable": [300, 2500], "marginal": [2500, 4000], "critical": [4000], "unit": "ms"},
+      "pitch": {"ideal": [500, 1500], "acceptable": [300, 2500], "marginal": [2500, 4000], "critical": [4000], "unit": "ms"},
+      "yaw":   {"ideal": [600, 2000], "acceptable": [400, 3000], "marginal": [3000, 5000], "critical": [5000], "unit": "ms"}
     },
     "oscillation_count": {
-      "ideal": [0, 1],
-      "acceptable": [1, 2],
-      "marginal": [2, 3],
-      "critical": [3]
+      "roll":  {"ideal": [0, 1], "acceptable": [0, 2], "marginal": [2, 3], "critical": [3], "unit": "count"},
+      "pitch": {"ideal": [0, 1], "acceptable": [0, 2], "marginal": [2, 3], "critical": [3], "unit": "count"},
+      "yaw":   {"ideal": [0, 1], "acceptable": [0, 2], "marginal": [2, 3], "critical": [3], "unit": "count"}
+    },
+    "ss_error_percent": {
+      "roll":  {"ideal": [0, 3], "acceptable": [0, 8], "marginal": [8, 15], "critical": [15], "unit": "%"},
+      "pitch": {"ideal": [0, 3], "acceptable": [0, 8], "marginal": [8, 15], "critical": [15], "unit": "%"},
+      "yaw":   {"ideal": [0, 5], "acceptable": [0, 10], "marginal": [10, 20], "critical": [20], "unit": "%"}
     }
   },
 

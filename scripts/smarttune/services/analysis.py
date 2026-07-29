@@ -6,20 +6,20 @@ smarttune/services/analysis.py
 不产生 Rich 输出、不执行 shell、不做任意写入。
 返回结构化 dataclass 与 dict，适合 JSON 序列化。
 
-与 CLI 命令完全对齐：
+与 CLI 命令完全对齐（PX4 平台仅支持以下 4 类分析）：
   - get_log_quality()     ↔  stune quality
-  - analyze_log()         ↔  stune analyze  (pid + fft + magfit + hardware + filter + sysid)
+  - analyze_log()         ↔  stune analyze  (pid + fft + sysid)
   - analyze_pid()         ↔  stune pid
   - analyze_fft()         ↔  stune fft
-  - analyze_magfit()      ↔  stune magfit
   - analyze_sysid()       ↔  stune sysid
-  - analyze_filter()      ↔  stune filter
-  - analyze_hardware()    ↔  stune hardware
+
+PX4 不支持 magfit/filter/hardware：
+  - 滤波器建议由 fft 模块的陷波输出覆盖
+  - 硬件信息由摘要脚本 px4_log_summary.py 第 1 节覆盖
 """
 
 from __future__ import annotations
 
-import importlib
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -36,9 +36,7 @@ from smarttune.services.serialize import (
     serialize_full_result,
     serialize_pid_result,
     serialize_fft_result,
-    serialize_magfit_result,
     serialize_sysid_results,
-    serialize_filter_result,
     serialize_extra_analyzers_results,
 )
 
@@ -103,7 +101,7 @@ def get_log_quality(
     n_gyro = len(fd.gyro) if has_gyro else 0
     completeness.append({"name": "IMU/Gyro", "samples": n_gyro, "ok": n_gyro > 0, "required": True})
 
-    completeness.append({"name": "Magnetometer", "samples": 1 if has_mag else 0, "ok": has_mag, "required": False})
+    completeness.append({"name": "Magnetometer", "samples": len(fd.mag) if has_mag else 0, "ok": has_mag, "required": False})
     completeness.append({"name": "Motor", "samples": len(fd.motor_output) if has_motor else 0, "ok": has_motor, "required": False})
     completeness.append({"name": "Battery", "samples": len(fd.battery_voltage) if has_battery else 0, "ok": has_battery, "required": False})
 
@@ -281,8 +279,7 @@ def run_module(
     """在已解析的 FlightData 上运行单个分析模块。
 
     返回原始结果对象（PIDAnalysisResult / FFTAnalysisResult /
-    MagFitResult / sysid list / hardware dict）—— 由调用方决定是
-    序列化（services）还是渲染（CLI）。
+    sysid dict）—— 由调用方决定是序列化（services）还是渲染（CLI）。
 
     若缺少能力或缺少所需数据则抛出 SmartTuneError。
     """
@@ -321,15 +318,6 @@ def run_module(
         analyzer = FFTAnalyzer(knowledge=fft_kb)
         return analyzer.analyze(fd)
 
-    if module == "magfit":
-        # PX4 不支持磁力计校准分析（capabilities() 未声明 "magfit"）
-        # _require_capability 已在上方拦截，此处不可达
-        raise SmartTuneError(
-            message="当前平台不支持磁力计校准分析",
-            hint="PX4 平台未实现 magfit 能力",
-            code=data_code,
-        )
-
     if module == "sysid":
         if not fd.pid:
             raise SmartTuneError(
@@ -340,18 +328,6 @@ def run_module(
         from smarttune.analyzers.sysid_analyzer import SysIDAnalyzer
         analyzer = SysIDAnalyzer(na=na, nb=nb)
         return analyzer.analyze(fd, axis=_axis)
-
-    if module == "hardware":
-        try:
-            _hr_mod = importlib.import_module(
-                f"smarttune.platform.{adapter.name}.hardware_report"
-            )
-        except ImportError:
-            raise SmartTuneError(
-                message=f"{adapter.display_name} 的硬件报告模块不可用",
-                code=data_code,
-            )
-        return _hr_mod.generate_hardware_report(fd.params, flight_data=fd)
 
     raise ValueError(f"未知分析模块: {module!r}")
 
@@ -399,25 +375,6 @@ def analyze_fft(
     }
 
 
-def analyze_magfit(
-    log_path: Path,
-    platform: str = "auto",
-    max_recommendations: int = 20,
-) -> Dict[str, Any]:
-    """运行磁力计标定分析。对应 ``stune magfit``。"""
-    _lp = Path(log_path) if isinstance(log_path, str) else log_path
-    adapter, fd = load_flight_data(_lp, platform)
-    result = run_module("magfit", adapter, fd)
-
-    return {
-        "platform": adapter.name,
-        "display_name": adapter.display_name,
-        "log_file": _lp.name,
-        "duration_s": round(fd.duration_s, 1),
-        **serialize_magfit_result(result, adapter, max_recommendations),
-    }
-
-
 def analyze_sysid(
     log_path: Path,
     platform: str = "auto",
@@ -446,141 +403,6 @@ def analyze_sysid(
     }
 
 
-def analyze_filter(
-    log_path: Path,
-    platform: str = "auto",
-    gyro_filter_hz: Optional[float] = None,
-    notch_freq_hz: Optional[float] = None,
-    auto_derive: bool = True,
-    _include_bode_data: bool = False,
-) -> Dict[str, Any]:
-    """运行滤波器传递函数分析（Bode 图数据）。对应 ``stune filter``。
-
-    Parameters
-    ----------
-    _include_bode_data : bool
-        内部标志 — 为 True 时，包含完整的 ``bode_data`` dict
-        （freqs、magnitude_db、phase_deg 数组），用于绘图生成。
-        不直接暴露给 MCP 调用方。
-    """
-    _lp = Path(log_path) if isinstance(log_path, str) else log_path
-    adapter, fd = load_flight_data(_lp, platform)
-
-    if "filter" not in adapter.capabilities():
-        raise SmartTuneError(
-            message=f"{adapter.display_name} 不支持滤波器分析",
-            hint=f"支持的功能: {', '.join(sorted(adapter.capabilities()))}",
-            code="E5050",
-        )
-
-    try:
-        _ft_mod = importlib.import_module(
-            f"smarttune.platform.{adapter.name}.filter_transfer"
-        )
-    except ImportError:
-        raise SmartTuneError(
-            message=f"{adapter.display_name} 的滤波器传递函数模块不可用",
-            code="E5051",
-        )
-
-    compute_filter_response = _ft_mod.compute_filter_response
-    derive_filters_from_params = _ft_mod.derive_filters_from_params
-    get_fallback_gyro_filter_hz = _ft_mod.get_fallback_gyro_filter_hz
-    get_notch_bandwidth_hz = _ft_mod.get_notch_bandwidth_hz
-    build_filter_display_lines = _ft_mod.build_filter_display_lines
-
-    params = fd.params or {}
-    sample_rate = fd.sample_rate_hz or 400
-    freqs = np.linspace(1, sample_rate / 2, 500)
-
-    use_manual = (gyro_filter_hz is not None or notch_freq_hz is not None) or not auto_derive
-
-    if use_manual:
-        current_gyro = gyro_filter_hz if gyro_filter_hz is not None else get_fallback_gyro_filter_hz(params)
-        notch_params = None
-        if notch_freq_hz is not None and notch_freq_hz > 0:
-            notch_params = {
-                "center_hz": notch_freq_hz,
-                "bandwidth_hz": get_notch_bandwidth_hz(params),
-                "attenuation_db": 30,
-                "harmonics": 3,
-            }
-        mag_db, phase_deg = compute_filter_response(
-            freqs, sample_rate, current_gyro, notch_params
-        )
-        config_summary = f"GYRO_FILTER={current_gyro:.0f}Hz"
-        if notch_freq_hz:
-            config_summary += f", Notch={notch_freq_hz:.0f}Hz"
-    else:
-        cfg = derive_filters_from_params(params)
-        config_summary = cfg.get("config_summary", "auto")
-        mag_db, phase_deg = compute_filter_response(freqs, sample_rate, params=params)
-
-    # -3dB 截止频率
-    idx_3db = np.where(mag_db < -3)[0]
-    cutoff_3db_hz = float(freqs[idx_3db[0]]) if idx_3db.size > 0 else None
-
-    # 汇总用关键频率点
-    key_freqs_list = [1, 5, 10, 20, 40, 80, 120, 200]
-    key_points = []
-    for fk in key_freqs_list:
-        if fk >= freqs[-1]:
-            break
-        idx = int(np.argmin(np.abs(freqs - fk)))
-        key_points.append({
-            "frequency_hz": fk,
-            "magnitude_db": round(float(mag_db[idx]), 1),
-            "phase_deg": round(float(phase_deg[idx]), 1),
-        })
-
-    # 滤波器链信息（自动模式）
-    filter_chain = None
-    if not use_manual:
-        try:
-            filter_chain = build_filter_display_lines(params)
-        except Exception:
-            pass
-
-    result = {
-        "platform": adapter.name,
-        "display_name": adapter.display_name,
-        "log_file": _lp.name,
-        "mode": "manual" if use_manual else "auto",
-        "config_summary": config_summary,
-        "cutoff_3db_hz": round(cutoff_3db_hz, 1) if cutoff_3db_hz else None,
-        "key_frequency_response": key_points,
-        "filter_chain": filter_chain,
-        "sample_rate_hz": round(sample_rate, 1),
-    }
-
-    if _include_bode_data:
-        result["bode_data"] = {
-            "freqs": freqs.tolist(),
-            "magnitude_db": mag_db.tolist(),
-            "phase_deg": phase_deg.tolist(),
-        }
-
-    return result
-
-
-def analyze_hardware(
-    log_path: Path,
-    platform: str = "auto",
-) -> Dict[str, Any]:
-    """运行硬件配置报告。对应 ``stune hardware``。"""
-    _lp = Path(log_path) if isinstance(log_path, str) else log_path
-    adapter, fd = load_flight_data(_lp, platform)
-    report = run_module("hardware", adapter, fd)
-
-    return {
-        "platform": adapter.name,
-        "display_name": adapter.display_name,
-        "log_file": _lp.name,
-        "duration_s": round(fd.duration_s, 1),
-        **report,
-    }
-
-
 # ---------------------------------------------------------------------------
 # 综合分析 — 完整（对应 `stune analyze`）
 # ---------------------------------------------------------------------------
@@ -603,8 +425,7 @@ def analyze_log(
     axis : str
         "all"、"roll"、"pitch" 或 "yaw"。
     include_modules : list[str] | None
-        ["pid", "fft", "magfit", "hardware", "filter", "sysid"] 的子集。
-        为 None 表示运行所有可用模块。
+        ["pid", "fft", "sysid"] 的子集。为 None 表示运行所有可用模块。
     max_recommendations : int
         包含的参数建议最大数量。
 
@@ -623,7 +444,8 @@ def analyze_log(
     module_failures: List[Dict[str, str]] = []
 
     # 确定要运行的模块
-    all_modules = {"pid", "fft", "magfit", "hardware", "filter", "sysid"}
+    # PX4 仅支持 pid/fft/sysid；magfit/filter/hardware 不支持
+    all_modules = {"pid", "fft", "sysid"}
     if include_modules is not None:
         requested = set(include_modules) & all_modules
     else:
@@ -645,23 +467,6 @@ def analyze_log(
             logger.warning("FFT 分析失败: %s", exc)
             module_failures.append({"module": "fft", "error": str(exc)})
 
-    # --- MagFit ---
-    if "magfit" in requested and "magfit" in capabilities and fd.has_mag:
-        try:
-            full_result.magfit = run_module("magfit", adapter, fd, kb=kb)
-        except Exception as exc:
-            logger.warning("MagFit 分析失败: %s", exc)
-            module_failures.append({"module": "magfit", "error": str(exc)})
-
-    # --- 硬件（平台专属导入，非通用）---
-    hw_dict = None
-    if "hardware" in requested and "hardware" in capabilities:
-        try:
-            hw_dict = run_module("hardware", adapter, fd, kb=kb)
-        except Exception as exc:
-            logger.warning("硬件报告失败: %s", exc)
-            module_failures.append({"module": "hardware", "error": str(exc)})
-
     # --- SysID ---
     sysid_dict = None
     if "sysid" in requested and "sysid" in capabilities and fd.pid:
@@ -672,36 +477,6 @@ def analyze_log(
         except Exception as exc:
             logger.warning("SysID 分析失败: %s", exc)
             module_failures.append({"module": "sysid", "error": str(exc)})
-
-    # --- 滤波器 ---
-    filter_dict = None
-    if "filter" in requested and "filter" in capabilities:
-        try:
-            _ft_mod = importlib.import_module(
-                f"smarttune.platform.{adapter.name}.filter_transfer"
-            )
-            params = fd.params or {}
-            sample_rate = fd.sample_rate_hz or 400
-            freqs = np.linspace(1, sample_rate / 2, 500)
-
-            cfg = _ft_mod.derive_filters_from_params(params)
-            config_summary = cfg.get("config_summary", "auto")
-            mag_db, phase_deg = _ft_mod.compute_filter_response(freqs, sample_rate, params=params)
-
-            idx_3db = np.where(mag_db < -3)[0]
-            cutoff_3db = float(freqs[idx_3db[0]]) if idx_3db.size > 0 else None
-
-            filter_dict = serialize_filter_result(
-                cutoff_3db_hz=cutoff_3db,
-                config_summary=config_summary,
-                freqs=freqs,
-                mag_db=mag_db,
-                phase_deg=phase_deg,
-                sample_rate_hz=sample_rate,
-            )
-        except Exception as exc:
-            logger.warning("滤波器分析失败: %s", exc)
-            module_failures.append({"module": "filter", "error": str(exc)})
 
     # --- 额外分析器（平台专属，例如 Betaflight 的 FF/RPM/DTerm）---
     extra_results = None
@@ -721,8 +496,8 @@ def analyze_log(
 
     # 检查至少一个模块成功
     has_any = any([
-        full_result.pid, full_result.fft, full_result.magfit,
-        hw_dict, sysid_dict, filter_dict, extra_results,
+        full_result.pid, full_result.fft,
+        sysid_dict, extra_results,
     ])
     if not has_any:
         if module_failures:
@@ -733,7 +508,7 @@ def analyze_log(
             )
         raise SmartTuneError(
             message="无分析模块可在此日志上运行",
-            hint="日志可能缺少所请求分析所需的必要数据（PID 信号、陀螺仪、磁力计）。",
+            hint="日志可能缺少所请求分析所需的必要数据（PID 信号、陀螺仪）。",
             code="E5098",
         )
 
@@ -741,12 +516,8 @@ def analyze_log(
     result = serialize_full_result(full_result, adapter, max_recommendations)
 
     # 添加不在 FullAnalysisResult 数据类中的模块
-    if hw_dict is not None:
-        result["modules"]["hardware"] = hw_dict
     if sysid_dict is not None:
         result["modules"]["sysid"] = sysid_dict
-    if filter_dict is not None:
-        result["modules"]["filter"] = filter_dict
     if extra_results is not None:
         result["modules"]["extra"] = serialize_extra_analyzers_results(extra_results)
 

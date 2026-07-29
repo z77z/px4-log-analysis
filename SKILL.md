@@ -165,7 +165,7 @@ print(f"Roll rate RMS error: {np.sqrt(np.mean(err**2)):.3f} rad/s")
 - 固定翼角速率环: `FW_RR_P/I/D/FF` (roll), `FW_PR_P/I/D/FF` (pitch), `FW_YR_P/I/D/FF` (yaw), FF 优先调好再调 P
 - 固定翼姿态/航向: `FW_R_TC`, `FW_P_TC`; 航迹/高度: `NPFG_*`, `TECS_*` (FW_T_CLMB_MAX, FW_T_SINK_MAX 等)
 
-**PID 阶跃响应量化阈值** (来自 `pid_rules.json`, smarttune PID 自动评级依据):
+**PID 阶跃响应量化阈值 - 多旋翼** (来自 `pid_rules.json`, smarttune PID 自动评级依据):
 
 | 指标                  | 理想       | 可接受     | 边缘        | 差       |
 | --------------------- | ---------- | ---------- | ----------- | -------- |
@@ -175,15 +175,41 @@ print(f"Roll rate RMS error: {np.sqrt(np.mean(err**2)):.3f} rad/s")
 | 稳定时间              | 150-350 ms | 100-600 ms | 600-1000 ms | >1000 ms |
 | 振荡次数              | 0-1        | 1-2        | 2-3         | >3       |
 
+**PID 阶跃响应量化阈值 - 固定翼** (来自 `pid_rules_fw.json`, FW 日志评级依据):
+
+| 指标                  | 理想        | 可接受      | 边缘          | 差         |
+| --------------------- | ----------- | ----------- | ------------- | ---------- |
+| 上升时间 (roll/pitch) | 200-500 ms  | 150-800 ms  | >800 ms       | -          |
+| 上升时间 (yaw)        | 300-700 ms  | 200-1000 ms | >1000 ms      | -          |
+| 超调量                | 0-20%       | 0-30%       | 30-50%        | >50%       |
+| 稳定时间              | 500-1500 ms | 300-2500 ms | 2500-4000 ms  | >4000 ms   |
+| 振荡次数              | 0-1         | 1-2         | 2-3           | >3         |
+
+> 注: FW 阈值整体宽于 MC — FW 时间常数 TC=0.5s, 响应慢于 MC 属正常; FW 的 FF 是主项, P 是次项, 调参顺序为 FF → P → I (与 MC 的 P → D → I 相反)。
+
 **症状 -> 参数映射** (多旋翼 rate 环):
 
 | 症状       | 主要调整                        | 次要检查                   |
 | ---------- | ------------------------------- | -------------------------- |
-| 过冲大     | 降 `MC_*RATE_P`                 | 适当降 `MC_*RATE_D`        |
+| 过冲大     | 提 `MC_*RATE_D`                 | 适当降 `MC_*RATE_P`        |
 | 响应慢     | 提 `MC_*RATE_P` 或 `MC_*RATE_K` | `IMU_GYRO_CUTOFF` 是否过低 |
 | 稳态误差   | 提 `MC_*RATE_I`                 | `MC_*R_INT_LIM` 积分限幅   |
 | 高频抖振   | 降 `MC_*RATE_D`                 | 降 `IMU_DGYRO_CUTOFF`      |
 | 外扰恢复慢 | 提 `MC_*RATE_P`                 | 适当提 `MC_*RATE_I`        |
+
+> 注: 超调时主调 D (D 用于 rate 阻尼, 抑制超调) — PX4 官方文档明确 "D gain is used for rate damping... avoid overshoots"。
+
+**症状 -> 参数映射** (固定翼 rate 环):
+
+| 症状       | 主要调整          | 次要检查                   |
+| ---------- | ----------------- | -------------------------- |
+| 过冲大     | 降 `FW_*_FF`      | 降 `FW_*_P`                |
+| 响应慢     | 提 `FW_*_FF`      | 检查 `FW_*_RMAX` 限幅      |
+| 稳态误差   | 提 `FW_*_I`       | 检查配平 `TRIM_*`          |
+| 高频抖振   | 降 `FW_*_P`       | 检查 `IMU_GYRO_CUTOFF`     |
+| 外扰恢复慢 | 提 `FW_*_FF`      | 适当提 `FW_*_P`            |
+
+> 注: FW 的 FF 是主项, 过冲/响应慢优先调 FF; FW 的 D 通常为 0 (空气动力阻尼已足够), 不作为主要调整项。
 
 **调参步进与安全限制**:
 
@@ -218,7 +244,7 @@ print(f"Roll rate RMS error: {np.sqrt(np.mean(err**2)):.3f} rad/s")
 | `IMU_GYRO_NF0_BW`  | 0-100 Hz  | 20   | 静态陷波 0 带宽                                                                  |
 | `IMU_GYRO_NF1_FRQ` | 0-1000 Hz | 0    | 静态陷波 1 (第二振动峰值)                                                        |
 | `IMU_GYRO_NF1_BW`  | 0-100 Hz  | 20   | 静态陷波 1 带宽                                                                  |
-| `IMU_GYRO_CUTOFF`  | 0-1000 Hz | 40   | 陀螺仪低通, 0=禁用; 常用 10-120 Hz                                               |
+| `IMU_GYRO_CUTOFF`  | 0-1000 Hz | 80   | 陀螺仪低通, 0=禁用; PX4 官方默认 80 Hz, 常用 40-120 Hz                            |
 | `IMU_DGYRO_CUTOFF` | 0-1000 Hz | 30   | D 项专用低通; 注: PX4 官方默认 30 Hz, `filter_rules.json` 同; 以日志参数快照为准 |
 | `IMU_ACCEL_CUTOFF` | 5-1000 Hz | 30   | 加速度计低通                                                                     |
 

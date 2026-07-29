@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "px4_version_min": "1.13",
+  "px4_version_min": "1.15",
   "description": "PX4 滤波/陷波知识库 — IMU_GYRO_* 参数体系",
 
   "notch_params": {
@@ -10,8 +10,8 @@
     "IMU_GYRO_NF1_FRQ": {"min": 0, "max": 1000, "default": 0, "unit": "Hz",
                          "note": "静态陷波 1（第二峰值用）"},
     "IMU_GYRO_NF1_BW":  {"min": 0, "max": 100,  "default": 20, "unit": "Hz"},
-    "IMU_GYRO_CUTOFF":  {"min": 0, "max": 1000, "default": 40, "unit": "Hz",
-                         "note": "gyro 低通，0 = 禁用"},
+    "IMU_GYRO_CUTOFF":  {"min": 0, "max": 1000, "default": 80, "unit": "Hz",
+                         "note": "gyro 低通，0 = 禁用；PX4 官方默认 80 Hz，常用 40-120 Hz"},
     "IMU_DGYRO_CUTOFF": {"min": 0, "max": 1000, "default": 30, "unit": "Hz",
                          "note": "D 项专用低通"},
     "IMU_ACCEL_CUTOFF": {"min": 5, "max": 1000, "default": 30, "unit": "Hz"}

@@ -198,35 +198,6 @@ class FFTAnalysisResult:
 
 
 # ---------------------------------------------------------------------------
-# 滤波器分析结果
-# ---------------------------------------------------------------------------
-
-@dataclass
-class FilterAnalysisResult:
-    """滤波器传递函数分析结果。"""
-    cutoff_3db_hz: Optional[float] = None
-    config_summary: str = ""
-    recommendations: List[ParamRecommendation] = field(default_factory=list)
-    # Bode plot 数据
-    freqs: Optional[Any] = None
-    magnitude_db: Optional[Any] = None
-    phase_deg: Optional[Any] = None
-
-
-# ---------------------------------------------------------------------------
-# 磁力计分析结果
-# ---------------------------------------------------------------------------
-
-@dataclass
-class MagFitResult:
-    """磁力计校准分析结果。"""
-    fitness_mgauss: float = 0.0
-    assessment: Assessment = Assessment.GOOD
-    offsets: Dict[str, float] = field(default_factory=dict)  # {"x": ..., "y": ..., "z": ...}
-    recommendations: List[ParamRecommendation] = field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
 # 系统辨识结果（R5 统一定义：从 analyzers/sysid_analyzer.py 迁移至此，
 # 作为 SysIDResult 的唯一定义；sysid_analyzer.py 改为从此处导入）
 # ---------------------------------------------------------------------------
@@ -290,24 +261,6 @@ class SysIDResult:
 
 
 # ---------------------------------------------------------------------------
-# 硬件报告
-# ---------------------------------------------------------------------------
-
-@dataclass
-class HardwareReport:
-    """硬件配置报告 — 包含飞控、传感器、参数概要。"""
-    firmware_version: str = ""
-    board_name: str = ""
-    imu_configs: List[Dict[str, Any]] = field(default_factory=list)
-    compass_configs: List[Dict[str, Any]] = field(default_factory=list)
-    filter_config: Dict[str, Any] = field(default_factory=dict)
-    pid_params: Dict[str, Dict[str, float]] = field(default_factory=dict)
-    battery_reports: List[Dict[str, Any]] = field(default_factory=list)
-    integrity_issues: List[str] = field(default_factory=list)
-    extras: Dict[str, Any] = field(default_factory=dict)
-
-
-# ---------------------------------------------------------------------------
 # 综合分析结果
 # ---------------------------------------------------------------------------
 
@@ -318,10 +271,9 @@ class FullAnalysisResult:
     log_file: str = ""
     pid: Optional[PIDAnalysisResult] = None
     fft: Optional[FFTAnalysisResult] = None
-    filter: Optional[FilterAnalysisResult] = None
-    magfit: Optional[MagFitResult] = None
     sysid: Dict[str, "SysIDResult"] = field(default_factory=dict)
-    hardware: Optional[HardwareReport] = None
+    # PX4 仅支持 pid/fft/sysid；filter/hardware/magfit 不支持
+    # 滤波器建议由 fft 的陷波输出覆盖，硬件信息由 px4_log_summary.py 覆盖
 
     @property
     def all_recommendations(self) -> List[ParamRecommendation]:
@@ -332,8 +284,6 @@ class FullAnalysisResult:
                 recs.extend(ax_result.recommendations)
         if self.fft:
             recs.extend(self.fft.recommendations)
-        if self.filter:
-            recs.extend(self.filter.recommendations)
-        if self.magfit:
-            recs.extend(self.magfit.recommendations)
+        # sysid 模块的带宽/增益建议为标量字段（suggested_bandwidth_hz/suggested_p_gain），
+        # 非 ParamRecommendation 对象，故不在此聚合；其值由 format_sysid/to_markdown 直接渲染
         return recs

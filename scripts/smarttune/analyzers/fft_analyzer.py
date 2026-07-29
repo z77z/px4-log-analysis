@@ -529,7 +529,7 @@ class FFTAnalyzer:
         ref = 0.0
         hmc = 0
         gyro_filt = 60
-        accel_filt = 10
+        accel_filt = 30  # PX4 默认值；过低会损害 EKF 精度
 
         if not peaks:
             # 无显著峰值
@@ -636,6 +636,14 @@ class FFTAnalyzer:
             # clamp 到 KB 定义的合法范围
             gyro_filt = max(gyro_filt_min, min(gyro_filt_max, gyro_filt))
 
+            # ACCEL_FILTER 调整 -- 比 gyro 保守：加速度计直接影响 EKF，
+            # 过低会引入滞后损害位置/速度估计，仅在严重振动时降低
+            if vib_level in ("POOR", "SEVERE"):
+                accel_filt = 20
+            elif vib_level == "CRITICAL":
+                accel_filt = 10
+            # EXCELLENT/GOOD/MARGINAL 保持默认 30
+
         return {
             "filter.notch1.enable": 1,
             "filter.notch1.mode": mode,
@@ -658,16 +666,17 @@ class FFTAnalyzer:
 
         PX4 静态陷波（IMU_GYRO_NF0/NF1）只有中心频率 + 带宽：
         - mode/REF/HMC/ATT 无对应概念 → 从输出中移除
-        - 陷波启用 = freq > 0（无独立 enable 参数，保留 generic
-          enable 键供上层判断，但映射层不会输出它）
+        - Issue 15 修复：移除 AP 语义的 `notch1.enable`/`notch2.enable` 键。
+          PX4 无独立 enable 参数，启用判定 = `IMU_GYRO_NF0_FRQ > 0`（由 freq 值隐式表达）
         - 第二峰值 → filter.notch2.*（IMU_GYRO_NF1_*）
         - 电机噪声需要跟踪时输出警告推荐 ESC RPM 动态陷波
         """
+        notch1_freq = recs.get("filter.notch1.freq", 0.0)
         out: Dict[str, Any] = {
-            "filter.notch1.enable": recs.get("filter.notch1.enable", 0),
-            "filter.notch1.freq": recs.get("filter.notch1.freq", 0.0),
+            # 仅保留 freq/bw；freq>0 即视为启用（PX4 语义）
+            "filter.notch1.freq": notch1_freq,
             "filter.notch1.bw": recs.get("filter.notch1.bw", 0.0),
-            "filter.gyro_lpf": recs.get("filter.gyro_lpf", 40),
+            "filter.gyro_lpf": recs.get("filter.gyro_lpf", 80),
             "filter.accel_lpf": recs.get("filter.accel_lpf", 30),
         }
 
@@ -678,13 +687,12 @@ class FFTAnalyzer:
                 (p for p in sorted_peaks[1:] if not p.get("is_harmonic")), None,
             )
             if second is not None:
-                out["filter.notch2.enable"] = 1
                 out["filter.notch2.freq"] = round(second["freq"], 1)
                 out["filter.notch2.bw"] = round(max(5.0, second["freq"] / 2.0), 1)
 
         # 动态跟踪需求警告：静态陷波不随油门漂移
         motor_peaks = [p for p in peaks if p.get("source") in ("motor", "prop_blade_pass")]
-        if motor_peaks and out["filter.notch1.enable"]:
+        if motor_peaks and notch1_freq > 0:
             warnings.append(
                 "PX4 静态陷波（IMU_GYRO_NF0）不随油门跟踪电机基频漂移："
                 "建议把 BW 设宽以覆盖巡航~满油门频段，或升级 PX4 v1.14+ "

@@ -310,7 +310,14 @@ def _compute_metrics(
 
 
 def _assess_metrics(metrics: StepMetrics, thresholds: Dict[str, Dict]) -> Assessment:
-    """根据阈值评估响应质量。"""
+    """根据阈值评估响应质量。
+
+    评级策略（利用 KB 的 ideal/acceptable/marginal/critical 四级区间）：
+    - 值在 [min, max]（acceptable）内 → 满分 2，按离 ideal 的偏差扣分
+    - 值在 marginal 区间 → 1 分（边缘但可接受）
+    - 值在 critical 区间或更差 → 0 分
+    - 值 < 0（哨兵未知）→ 1 分（中性）
+    """
     score = 0.0
     max_score = 0.0
     checks = [
@@ -325,23 +332,62 @@ def _assess_metrics(metrics: StepMetrics, thresholds: Dict[str, Dict]) -> Assess
             continue
         th = thresholds[key]
         ideal, max_v, min_v = th["ideal"], th["max"], th["min"]
+        # marginal/critical 区间（若 KB 提供）
+        marg_min = th.get("marginal_min")
+        marg_max = th.get("marginal_max")
+        crit_min = th.get("critical_min")
+        crit_max = th.get("critical_max")
         max_score += 2
         if value < 0:
             score += 1
             continue
         if min_v <= value <= max_v:
+            # acceptable 区间内：按离 ideal 的偏差线性扣分
             deviation = abs(value - ideal) / (max_v - min_v + 1e-9)
             score += 2 - deviation
         else:
-            if value < min_v:
-                edge_deviation = abs(min_v - ideal) / (max_v - min_v + 1e-9)
-                denom = max(abs(min_v), abs(max_v), 1e-9)
-                excess = (min_v - value) / denom
+            # 超出 acceptable，判断是否在 marginal/critical 区间
+            in_marginal = False
+            in_critical = False
+            # critical 判断独立于 marginal（KB 可能只有 critical 而无 marginal）
+            if crit_min is not None:
+                if value > max_v:
+                    # critical 区间在 acceptable 上方：value >= crit_min 即 critical
+                    # 若 critical 只有下限 [g]，则 value >= g 即 critical
+                    # 若 critical 有上下限 [g,h]，则 g <= value <= h 即 critical
+                    if crit_max is not None:
+                        in_critical = crit_min <= value <= crit_max
+                    else:
+                        in_critical = value >= crit_min
+                else:  # value < min_v
+                    # critical 区间在 acceptable 下方
+                    if crit_max is not None:
+                        in_critical = crit_min <= value <= crit_max
+                    else:
+                        in_critical = value <= crit_min
+            if not in_critical and marg_min is not None:
+                # marginal 区间通常在 acceptable 之外侧
+                if value > max_v:
+                    if marg_max is not None:
+                        in_marginal = max_v <= value <= marg_max
+                else:  # value < min_v
+                    if marg_max is not None:
+                        in_marginal = marg_min <= value <= min_v
+            if in_critical:
+                score += 0.0
+            elif in_marginal:
+                score += 1.0
             else:
-                edge_deviation = abs(max_v - ideal) / (max_v - min_v + 1e-9)
-                denom = max(abs(max_v), 1e-9)
-                excess = (value - max_v) / denom
-            score += max(0.0, (2.0 - edge_deviation) * (1.0 - excess))
+                # 无 marginal/critical 信息时，按原有偏离度衰减
+                if value < min_v:
+                    edge_deviation = abs(min_v - ideal) / (max_v - min_v + 1e-9)
+                    denom = max(abs(min_v), abs(max_v), 1e-9)
+                    excess = (min_v - value) / denom
+                else:
+                    edge_deviation = abs(max_v - ideal) / (max_v - min_v + 1e-9)
+                    denom = max(abs(max_v), 1e-9)
+                    excess = (value - max_v) / denom
+                score += max(0.0, (2.0 - edge_deviation) * (1.0 - excess))
 
     if max_score == 0:
         return Assessment.MARGINAL
@@ -397,11 +443,13 @@ class PIDReviewer:
 
     @staticmethod
     def _normalize_thresholds(kb_thresholds: Any) -> Dict[str, Dict[str, Dict[str, float]]]:
-        """将 KB 阈值统一转换为消费方可用的 "轴→指标→{min,max,ideal}" 形。
+        """将 KB 阈值统一转换为消费方可用的 "轴→指标→{min,max,ideal,...}" 形。
 
         支持两种输入形状：
-        1. 区间形（KB JSON 现状）：{metric: {axis: {"ideal":[a,b], "acceptable":[c,d]}}}
-           转换：min=acceptable[0], max=acceptable[1], ideal=(ideal[0]+ideal[1])/2
+        1. 区间形（KB JSON 现状）：{metric: {axis: {"ideal":[a,b], "acceptable":[c,d],
+           "marginal":[e,f], "critical":[g,h]}}}
+           转换：min=acceptable[0], max=acceptable[1], ideal=(ideal[0]+ideal[1])/2,
+           marginal_min/marginal_max/critical_min/critical_max 保留（若存在）
         2. 标量形（消费方原生）：{axis: {metric: {"min":v, "max":v, "ideal":v}}}
            原样返回。
         3. 其它（不可用）→ 返回空 dict，调用方回退到 _DEFAULT_THRESHOLDS。
@@ -434,11 +482,22 @@ class PIDReviewer:
                 if not (isinstance(ideal, (list, tuple)) and len(ideal) == 2
                         and isinstance(acceptable, (list, tuple)) and len(acceptable) == 2):
                     continue
-                result[axis][metric] = {
+                entry: Dict[str, float] = {
                     "min": float(acceptable[0]),
                     "max": float(acceptable[1]),
                     "ideal": (float(ideal[0]) + float(ideal[1])) / 2.0,
                 }
+                # 保留 marginal/critical 区间（若存在），供 _assess_metrics 精确评级
+                for level in ("marginal", "critical"):
+                    rng = ranges.get(level)
+                    if isinstance(rng, (list, tuple)) and len(rng) >= 1:
+                        # critical 区间可能只给下限 [g]，marginal 通常给 [e,f]
+                        if len(rng) >= 2:
+                            entry[f"{level}_min"] = float(rng[0])
+                            entry[f"{level}_max"] = float(rng[1])
+                        else:
+                            entry[f"{level}_min"] = float(rng[0])
+                result[axis][metric] = entry
                 converted_any = True
 
         return result if converted_any else _DEFAULT_THRESHOLDS

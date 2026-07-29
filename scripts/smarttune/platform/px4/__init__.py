@@ -264,6 +264,12 @@ class PX4Adapter(PlatformAdapter):
         # 反向映射（供 map_param_to_generic 使用）
         param_map_reverse = {v: k for k, v in param_map.items()}
 
+        # 缓存为实例属性，供 map_param_to_platform / map_param_to_generic 使用（Issue 3 修复）
+        # 否则这两个方法只能查 _PARAM_MAP_TO_PLATFORM（永远 MC），FW/VTOL 会拿到错误的参数名
+        self._param_map = param_map
+        self._param_map_reverse = param_map_reverse
+        self._frame_type = frame_type
+
         # 平台参数 → generic key 双写
         for generic, plat in param_map.items():
             if plat in params:
@@ -535,12 +541,23 @@ class PX4Adapter(PlatformAdapter):
     # ── 参数映射 ────────────────────────────────────────────
 
     def map_param_to_platform(self, generic_name: str) -> str:
+        # Issue 3 修复：使用 parse() 中按机型缓存的 _param_map，
+        # 否则 FW/VTOL 日志会错误地返回 MC_*RATE_* 参数名
+        pm = getattr(self, "_param_map", None)
+        if pm is not None:
+            return pm.get(generic_name, generic_name)
+        # 回退：parse() 未调用前用 MC 默认表（仅用于命令行帮助等场景）
         return _PARAM_MAP_TO_PLATFORM.get(generic_name, generic_name)
 
     def map_param_to_generic(self, platform_name: str) -> str:
+        pm_rev = getattr(self, "_param_map_reverse", None)
+        if pm_rev is not None:
+            return pm_rev.get(platform_name, platform_name)
         return _PARAM_MAP_TO_GENERIC.get(platform_name, platform_name)
 
-    # ── 能力（R7：filter/hardware 已实现，加入声明集合）─────
+    # ── 能力声明 ────────────────────────────────────────────
 
     def capabilities(self) -> Set[str]:
-        return {"pid", "fft", "sysid", "quality", "filter", "hardware"}
+        # filter/hardware 已移除：滤波器分析由 fft 模块的陷波建议覆盖，
+        # 硬件信息由摘要脚本 px4_log_summary.py 第 1/11 节覆盖，避免功能重复
+        return {"pid", "fft", "sysid", "quality"}

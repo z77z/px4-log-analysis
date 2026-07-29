@@ -303,7 +303,10 @@ def main(path):
             print(f"  单芯电压({n_cells}S): 起始 {v[0]/n_cells:.2f} V, 最低 {np.nanmin(v)/n_cells:.2f} V, "
                   f"结束 {v[-1]/n_cells:.2f} V")
         if len(c):
-            print(f"  电流: 平均 {np.nanmean(c):.1f} A, 峰值 {np.nanmax(c):.1f} A")
+            if np.nanmax(c) > 0:
+                print(f"  电流: 平均 {np.nanmean(c):.1f} A, 峰值 {np.nanmax(c):.1f} A")
+            else:
+                print("  电流: 0 A (可能未接电流传感器, 功率统计不可用)")
         mah = np.asarray(d.get("discharged_mah", []), dtype=np.float64)
         if len(mah):
             print(f"  消耗电量: {mah[-1] - mah[0]:.0f} mAh")
@@ -314,6 +317,7 @@ def main(path):
             print(f"  电池告警等级最高: {int(np.nanmax(warn))} (1=LOW 2=CRITICAL 3=EMERGENCY)")
 
         # ---- 功率与机型分项统计 ----
+        has_current = len(c) and np.nanmax(c) > 0
         if len(v) and len(c) and len(v) == len(c):
             p = v * c  # 瞬时功率 W
 
@@ -323,12 +327,13 @@ def main(path):
             if ld is not None and "landed_state" in ld:
                 airborne = state_at(np.asarray(ld["timestamp"], dtype=np.float64),
                                     np.asarray(ld["landed_state"], dtype=np.float64), t_bat) > 1
-            if np.any(airborne):
-                print(f"  功率(空中): 平均 {np.nanmean(p[airborne]):.0f} W, "
-                      f"最大 {np.nanmax(p[airborne]):.0f} W")
-            else:
-                airborne = np.ones(len(t_bat), dtype=bool)
-                print(f"  功率(全程): 平均 {np.nanmean(p):.0f} W, 最大 {np.nanmax(p):.0f} W")
+            if has_current:
+                if np.any(airborne):
+                    print(f"  功率(空中): 平均 {np.nanmean(p[airborne]):.0f} W, "
+                          f"最大 {np.nanmax(p[airborne]):.0f} W")
+                else:
+                    airborne = np.ones(len(t_bat), dtype=bool)
+                    print(f"  功率(全程): 平均 {np.nanmean(p):.0f} W, 最大 {np.nanmax(p):.0f} W")
 
             # 归一化油门序列 (悬停油门用)
             thr_bat = None
@@ -364,23 +369,26 @@ def main(path):
                 if np.sum(mask) < 5:
                     print(f"  {label}: 样本不足")
                     return
-                print(f"  {label}: 时长 {seg_seconds(mask):.0f} s, "
-                      f"巡航平均功率 {np.nanmean(p[mask]):.0f} W, "
-                      f"段内最大功率 {np.nanmax(p[mask]):.0f} W, "
-                      f"平均电流 {np.nanmean(c[mask]):.1f} A, "
-                      f"平均电压 {np.nanmean(v[mask]):.2f} V")
+                parts = [f"时长 {seg_seconds(mask):.0f} s"]
+                if has_current:
+                    parts.append(f"巡航平均功率 {np.nanmean(p[mask]):.0f} W")
+                    parts.append(f"段内最大功率 {np.nanmax(p[mask]):.0f} W")
+                    parts.append(f"平均电流 {np.nanmean(c[mask]):.1f} A")
+                parts.append(f"平均电压 {np.nanmean(v[mask]):.2f} V")
+                print(f"  {label}: " + ", ".join(parts))
 
             def hover_stats(mask, label):
                 if np.sum(mask) < 5:
                     print(f"  {label}: 样本不足")
                     return
-                line = (f"  {label}: 时长 {seg_seconds(mask):.0f} s, "
-                        f"悬停功率 {np.nanmean(p[mask]):.0f} W, "
-                        f"平均电流 {np.nanmean(c[mask]):.1f} A, "
-                        f"平均电压 {np.nanmean(v[mask]):.2f} V")
+                parts = [f"时长 {seg_seconds(mask):.0f} s"]
+                if has_current:
+                    parts.append(f"悬停功率 {np.nanmean(p[mask]):.0f} W")
+                    parts.append(f"平均电流 {np.nanmean(c[mask]):.1f} A")
+                parts.append(f"平均电压 {np.nanmean(v[mask]):.2f} V")
                 if thr_bat is not None:
-                    line += f", 悬停油门 {np.nanmean(thr_bat[mask]):.2f} (归一化0~1)"
-                print(line)
+                    parts.append(f"悬停油门 {np.nanmean(thr_bat[mask]):.2f} (归一化0~1)")
+                print(f"  {label}: " + ", ".join(parts))
 
             vt = get_data(ulog, "vtol_vehicle_status")
             if kind == "vtol" and vt is not None and "vehicle_vtol_state" in vt:

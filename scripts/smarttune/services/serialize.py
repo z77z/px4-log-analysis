@@ -24,10 +24,7 @@ from smarttune.models.analysis_result import (
     AxisPIDResult,
     Confidence,
     FFTAnalysisResult,
-    FilterAnalysisResult,
     FullAnalysisResult,
-    HardwareReport,
-    MagFitResult,
     ParamRecommendation,
     PIDAnalysisResult,
     StepMetrics,
@@ -221,72 +218,6 @@ def serialize_fft_result(
     }
 
 
-def serialize_magfit_result(
-    result,  # MagFitResult（services 层）或 FitResult（analyzer.MAGFit.analyze）
-    adapter: Optional[PlatformAdapter] = None,
-    max_recommendations: int = 20,
-) -> Dict[str, Any]:
-    """序列化磁力计标定结果。
-
-    兼容 MagFitResult（services 层）和 FitResult（analyzer.MAGFit.analyze）两种结果:
-    - MagFitResult: .recommendations (List[ParamRecommendation]) + .offsets (dict x/y/z)
-    - FitResult: .ofs/.dia/.odi/.mot (4 个 np.ndarray shape 3) + .assessment (str), 无 recommendations
-    """
-    # assessment: 字符串或 Enum
-    assess = result.assessment
-    if isinstance(assess, Enum):
-        assessment_str = assess.value
-    else:
-        assessment_str = str(assess)
-
-    # fitness: 鸭子类型
-    fitness_mgauss = _safe_float(getattr(result, "fitness_mgauss", 0.0))
-
-    # offsets: 优先 result.offsets(dict), 否则 FitResult.ofs (np.ndarray shape 3)
-    offsets_attr = getattr(result, "offsets", None)
-    if isinstance(offsets_attr, dict):
-        offsets_dict = {k: _safe_float(v) for k, v in offsets_attr.items()}
-    elif hasattr(result, "ofs"):
-        ofs = result.ofs
-        if hasattr(ofs, "__len__") and len(ofs) >= 3:
-            offsets_dict = {
-                "x": _safe_float(ofs[0]),
-                "y": _safe_float(ofs[1]),
-                "z": _safe_float(ofs[2]),
-            }
-        else:
-            offsets_dict = {}
-    else:
-        offsets_dict = {}
-
-    # recommendations: 鸭子类型兜底（FitResult 没有 recommendations）
-    recs_raw = getattr(result, "recommendations", None) or []
-    recs = [
-        serialize_param_recommendation(r, adapter)
-        for r in list(recs_raw)[:max_recommendations]
-    ]
-
-    return {
-        "assessment": assessment_str,
-        "fitness_mgauss": fitness_mgauss,
-        "offsets": offsets_dict,
-        "recommendations": recs,
-    }
-
-
-def serialize_hardware_report(report: HardwareReport) -> Dict[str, Any]:
-    """序列化硬件配置报告。"""
-    return {
-        "firmware_version": report.firmware_version,
-        "board_name": report.board_name,
-        "imu_configs": to_jsonable(report.imu_configs),
-        "compass_configs": to_jsonable(report.compass_configs),
-        "filter_config": to_jsonable(report.filter_config),
-        "pid_params": to_jsonable(report.pid_params),
-        "integrity_issues": report.integrity_issues,
-    }
-
-
 def serialize_sysid_results(results: Dict[str, Any]) -> Dict[str, Any]:
     """序列化系统辨识结果。
 
@@ -304,37 +235,7 @@ def serialize_sysid_results(results: Dict[str, Any]) -> Dict[str, Any]:
     return {"axes": axes}
 
 
-def serialize_filter_result(
-    cutoff_3db_hz: Optional[float],
-    config_summary: str,
-    freqs: Any,
-    mag_db: Any,
-    phase_deg: Any,
-    sample_rate_hz: float,
-) -> Dict[str, Any]:
-    """将滤波器传递函数分析序列化为紧凑 dict。
-
-    返回关键频率点，而非完整数组。
-    """
-    key_freqs_list = [1, 5, 10, 20, 40, 80, 120, 200]
-    key_points = []
-    if _HAS_NUMPY and isinstance(freqs, np.ndarray):
-        for fk in key_freqs_list:
-            if fk >= freqs[-1]:
-                break
-            idx = int(np.argmin(np.abs(freqs - fk)))
-            key_points.append({
-                "frequency_hz": fk,
-                "magnitude_db": round(float(mag_db[idx]), 1),
-                "phase_deg": round(float(phase_deg[idx]), 1),
-            })
-
-    return {
-        "config_summary": config_summary,
-        "cutoff_3db_hz": round(cutoff_3db_hz, 1) if cutoff_3db_hz is not None else None,
-        "key_frequency_response": key_points,
-        "sample_rate_hz": round(sample_rate_hz, 1),
-    }
+# filter/hardware 序列化函数已移除：对应模块已删除
 
 
 def serialize_extra_analyzers_results(results: Dict[str, Any]) -> Dict[str, Any]:
@@ -361,10 +262,7 @@ def serialize_full_result(
         modules["pid"] = serialize_pid_result(result.pid, adapter, max_recommendations)
     if result.fft is not None:
         modules["fft"] = serialize_fft_result(result.fft, adapter, max_recommendations)
-    if result.magfit is not None:
-        modules["magfit"] = serialize_magfit_result(result.magfit, adapter, max_recommendations)
-    if result.hardware is not None:
-        modules["hardware"] = serialize_hardware_report(result.hardware)
+    # PX4 仅支持 pid/fft/sysid；magfit/filter/hardware 不支持
     return {
         "platform": result.platform,
         "log_file": result.log_file,
