@@ -49,15 +49,15 @@
   "tuning_rules": {
     "default_pid_ranges": {
       "FW_RR_P":  {"min": 0.0,  "max": 0.3,  "typical": 0.06, "unit": "gain"},
-      "FW_RR_I":  {"min": 0.0,  "max": 0.5,  "typical": 0.1,  "unit": "gain"},
+      "FW_RR_I":  {"min": 0.0,  "max": 0.5,  "typical": 0.01, "unit": "gain"},
       "FW_RR_D":  {"min": 0.0,  "max": 0.005,"typical": 0.0,  "unit": "gain"},
       "FW_RR_FF": {"min": 0.0,  "max": 1.0,  "typical": 0.4,  "unit": "gain"},
-      "FW_PR_P":  {"min": 0.0,  "max": 0.3,  "typical": 0.06, "unit": "gain"},
-      "FW_PR_I":  {"min": 0.0,  "max": 0.5,  "typical": 0.1,  "unit": "gain"},
+      "FW_PR_P":  {"min": 0.0,  "max": 0.3,  "typical": 0.04, "unit": "gain"},
+      "FW_PR_I":  {"min": 0.0,  "max": 0.5,  "typical": 0.01, "unit": "gain"},
       "FW_PR_D":  {"min": 0.0,  "max": 0.005,"typical": 0.0,  "unit": "gain"},
       "FW_PR_FF": {"min": 0.0,  "max": 1.0,  "typical": 0.4,  "unit": "gain"},
       "FW_YR_P":  {"min": 0.0,  "max": 0.3,  "typical": 0.05, "unit": "gain"},
-      "FW_YR_I":  {"min": 0.0,  "max": 0.4,  "typical": 0.1,  "unit": "gain"},
+      "FW_YR_I":  {"min": 0.0,  "max": 0.4,  "typical": 0.01, "unit": "gain"},
       "FW_YR_D":  {"min": 0.0,  "max": 0.005,"typical": 0.0,  "unit": "gain"},
       "FW_YR_FF": {"min": 0.0,  "max": 1.0,  "typical": 0.3,  "unit": "gain"}
     },
@@ -65,6 +65,9 @@
       "FW 的 FF (前馈) 是主项，P 是次项，与 MC 的 P 主项相反 — 调参顺序应为 FF → P → I",
       "FW 的 D 项通常为 0 — 空气动力阻尼已足够，D 项容易放大结构共振",
       "FW 响应慢于 MC — 典型时间常数 TC=0.5s，上升时间 200-500ms 为理想区间",
+      "外环时间常数 FW_R_TC / FW_P_TC 默认 0.5s — 增大使响应变软，减小使响应变硬（多数机架无需调整）",
+      "FW 官方推荐 I 起始值 0.01 — 倍增直至消除 commanded/actual 偏差（通常需查看日志判断）",
+      "FW 官方推荐 Pitch P (FW_PR_P) 起始 0.04，低于 Roll P (FW_RR_P) 起始 0.06 — Pitch 对配平更敏感",
       "FW 调参需考虑空速 — 低空速下舵效减弱，PID 增益需按空速缩放（FW_*_RMAX 限幅）",
       "VTOL 在 FW 阶段使用 FW_* 参数，在 MC 阶段切换为 MC_*RATE_* 参数"
     ]
@@ -122,7 +125,7 @@
       "rule_id": "FW_OSCILLATION",
       "symptom": "oscillation_count",
       "adjust": [{"param": "p", "action": "decrease", "factor": 0.85}],
-      "reason": "FW 振荡 - 降低 P 增益（FW 通常 D=0，不加 D）",
+      "reason": "FW 振荡 - 降低 P 增益（PX4 官方建议降幅 50%，此处保守取 15% 以防过调；FW 通常 D=0 不加 D）",
       "confidence": "medium"
     },
     {

@@ -8,7 +8,7 @@
   "pid_bounds": {
     "p":  [0.01, 0.5],
     "i":  [0.01, 0.6],
-    "d":  [0.0, 0.01],
+    "d":  [0.0, 0.005],
     "ff": [0.0, 1.0]
   },
 
@@ -45,28 +45,29 @@
   "tuning_rules": {
     "default_pid_ranges": {
       "MC_ROLLRATE_P":  {"min": 0.01, "max": 0.5,  "typical": 0.15,  "unit": "gain"},
-      "MC_ROLLRATE_I":  {"min": 0.01, "max": 0.6,  "typical": 0.2,   "unit": "gain"},
-      "MC_ROLLRATE_D":  {"min": 0.0,  "max": 0.01, "typical": 0.003, "unit": "gain"},
+      "MC_ROLLRATE_I":  {"min": 0.01, "max": 0.6,  "typical": 0.3,   "unit": "gain"},
+      "MC_ROLLRATE_D":  {"min": 0.0,  "max": 0.005,"typical": 0.003, "unit": "gain"},
       "MC_ROLLRATE_K":  {"min": 0.5,  "max": 2.0,  "typical": 1.0,   "unit": "gain"},
       "MC_PITCHRATE_P": {"min": 0.01, "max": 0.6,  "typical": 0.15,  "unit": "gain"},
-      "MC_PITCHRATE_I": {"min": 0.01, "max": 0.6,  "typical": 0.2,   "unit": "gain"},
-      "MC_PITCHRATE_D": {"min": 0.0,  "max": 0.01, "typical": 0.003, "unit": "gain"},
+      "MC_PITCHRATE_I": {"min": 0.01, "max": 0.6,  "typical": 0.3,   "unit": "gain"},
+      "MC_PITCHRATE_D": {"min": 0.0,  "max": 0.005,"typical": 0.003, "unit": "gain"},
       "MC_PITCHRATE_K": {"min": 0.5,  "max": 2.0,  "typical": 1.0,   "unit": "gain"},
       "MC_YAWRATE_P":   {"min": 0.05, "max": 0.6,  "typical": 0.2,   "unit": "gain"},
       "MC_YAWRATE_I":   {"min": 0.01, "max": 0.4,  "typical": 0.1,   "unit": "gain"},
-      "MC_YAWRATE_D":   {"min": 0.0,  "max": 0.01, "typical": 0.0,   "unit": "gain"},
+      "MC_YAWRATE_D":   {"min": 0.0,  "max": 0.005,"typical": 0.0,   "unit": "gain"},
       "MC_YAWRATE_K":   {"min": 0.5,  "max": 2.0,  "typical": 1.0,   "unit": "gain"}
     },
     "px4_notes": [
       "PX4 的 MC_*RATE_K 是整轴总增益乘子 — P/I/D 比例合适但整体响应弱时优先调 K，而不是同步放大三项",
-      "PX4 D 项量级 (~0.003) 远小于 ArduPilot (~0.015)，二者增益不可横向比较",
+      "PX4 D 项量级 (~0.003) 用于增加阻尼抑制超调，过高会放大噪声导致电机发热（官方：仅在需要时提高）",
+      "PX4 官方推荐 parallel form (K=1) 下 I 典型区间 0.3-0.5（当 P≈0.15 时），pitch 的 I 通常略高于 roll",
       "PX4 v1.14+ 推荐先用机载自动调参 (MC_AT_EN) 取得基线，再用日志分析做精修"
     ]
   },
 
   "experience_rules": {
     "symptom_to_param": {
-      "过冲大":      {"primary_action": "降低 MC_*RATE_P", "secondary_action": "适当降低 MC_*RATE_D"},
+      "过冲大":      {"primary_action": "提高 MC_*RATE_D", "secondary_action": "适当降低 MC_*RATE_P"},
       "响应慢":      {"primary_action": "提高 MC_*RATE_P 或 MC_*RATE_K", "secondary_action": "检查 IMU_GYRO_CUTOFF 是否过低"},
       "稳态误差":    {"primary_action": "提高 MC_*RATE_I", "secondary_action": "检查 MC_*R_INT_LIM 积分限幅"},
       "高频抖振":    {"primary_action": "降低 MC_*RATE_D", "secondary_action": "降低 IMU_DGYRO_CUTOFF"},
@@ -98,9 +99,9 @@
     {
       "rule_id": "MC_HIGH_OS",
       "symptom": "overshoot",
-      "adjust": [{"param": "p", "action": "decrease", "factor": 0.85},
-                 {"param": "d", "action": "decrease", "factor": 0.90}],
-      "reason": "MC 超调量超阈值 - 降低 P 增益",
+      "adjust": [{"param": "d", "action": "increase", "factor": 1.10},
+                 {"param": "p", "action": "decrease", "factor": 0.90}],
+      "reason": "MC 超调量超阈值 - 提高 D 增益以增加阻尼（PX4 官方：D 用于抑制超调），并适当降低 P",
       "confidence": "high"
     },
     {
