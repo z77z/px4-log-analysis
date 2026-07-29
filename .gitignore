@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Analysis outputs (临时文件)
+summary.txt
+stune_output.txt
+deep_dive.txt
+report_body.md
+flight.ulg
+analyze_*.py
+plot_*.py
+
+# Generated charts
+output/
+*.png
+
+# Trae share packages
+.trae-html-share-packages/

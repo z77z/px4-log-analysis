@@ -1,0 +1,6 @@
+pyulog>=1.0,<2.0
+numpy>=1.21
+scipy>=1.7
+matplotlib>=3.5
+click>=8.0
+rich>=13.0
