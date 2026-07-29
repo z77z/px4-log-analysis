@@ -1,11 +1,16 @@
 # PX4 Log Analysis
 
-> 一个 AI Skill:让大模型学会分析 PX4 飞行日志、诊断飞行问题、输出调参建议。
+> AI-powered PX4 flight log analysis & PID tuning skill — analyze `.ulg` logs, diagnose vibration / tracking / EKF issues, generate tuning guides with historical trend comparison.
 
-[![Skill](https://img.shields.io/badge/AI-Skill-8b5cf6?logo=openai&logoColor=white)](SKILL.md)
+> AI 驱动的 PX4 飞行日志分析与 PID 调参技能 — 解析 `.ulg` 日志,诊断振动 / 控制跟踪 / EKF 问题,输出含历史对比的调参指南。
+
+[![AI Skill](https://img.shields.io/badge/AI-Skill-8b5cf6?logo=openai&logoColor=white)](SKILL.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![PX4](https://img.shields.io/badge/PX4-Autopilot-orange?logo=px4&logoColor=white)](https://px4.io/)
+[![ULog](https://img.shields.io/badge/Format-.ulg-3776ab)](https://docs.px4.io/main/en/log_formats.html)
+[![FFT](https://img.shields.io/badge/FFT-Notch%20Filter-ff6b35)](https://docs.px4.io/main/en/config_mc/filter_tuning.html)
+[![PID](https://img.shields.io/badge/PID-Tuning-00d2d3)](https://docs.px4.io/main/en/config_mc/pid_tuning_guide_multicopter.html)
 
 ---
 
